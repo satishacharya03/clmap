@@ -1,7 +1,7 @@
 export const runtime = 'edge'
 
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { pool } from '@/lib/edge-db'
 import { hashPassword, generateToken, setAuthCookie } from '@/lib/auth'
 import { validateRegistration } from '@/utils/validators'
 
@@ -20,11 +20,12 @@ export async function POST(request: NextRequest) {
         }
 
         // Check if user already exists
-        const existingUser = await prisma.user.findUnique({
-            where: { email: email.toLowerCase() }
-        })
+        const { rows: existingRows } = await pool.query(
+            'SELECT 1 FROM users WHERE email = $1',
+            [email.toLowerCase()]
+        )
 
-        if (existingUser) {
+        if (existingRows.length > 0) {
             return NextResponse.json(
                 { error: 'Email already registered' },
                 { status: 409 }
@@ -33,21 +34,15 @@ export async function POST(request: NextRequest) {
 
         // Hash password and create user
         const hashedPassword = await hashPassword(password)
-        const user = await prisma.user.create({
-            data: {
-                name: name.trim(),
-                email: email.toLowerCase(),
-                password: hashedPassword,
-                role: 'USER'
-            },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                createdAt: true
-            }
-        })
+
+        const { rows: userRows } = await pool.query(
+            `INSERT INTO users (id, name, email, password, role, "updatedAt") 
+             VALUES (gen_random_uuid(), $1, $2, $3, 'USER', NOW()) 
+             RETURNING id, name, email, role, "createdAt"`,
+            [name.trim(), email.toLowerCase(), hashedPassword]
+        )
+
+        const user = userRows[0]
 
         // Generate token and set cookie
         const token = await generateToken({

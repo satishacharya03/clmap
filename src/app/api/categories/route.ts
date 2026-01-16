@@ -1,19 +1,21 @@
 export const runtime = 'edge'
 
 import { NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { pool } from '@/lib/edge-db'
 
 // GET /api/categories - List all categories
 export async function GET() {
     try {
-        const categories = await prisma.placeCategory.findMany({
-            orderBy: { categoryName: 'asc' },
-            include: {
-                _count: {
-                    select: { places: true }
-                }
-            }
-        })
+        const query = `
+            SELECT 
+                pc.*,
+                jsonb_build_object(
+                    'places', (SELECT COUNT(*) FROM places p WHERE p."categoryId" = pc.id)
+                ) as "_count"
+            FROM place_categories pc
+            ORDER BY pc."categoryName" ASC
+        `
+        const { rows: categories } = await pool.query(query)
 
         return NextResponse.json({ categories })
     } catch (error) {

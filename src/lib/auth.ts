@@ -1,9 +1,16 @@
-// Edge-compatible auth using Web Crypto API and jose
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
-import prisma from './db'
+import { pool } from './edge-db'
 
-type User = Awaited<ReturnType<typeof prisma.user.findUnique>>
+// Types matching database schema
+export interface User {
+    id: string
+    name: string | null
+    email: string
+    role: 'USER' | 'ADMIN'
+    createdAt: Date
+    updatedAt: Date
+}
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-change-me')
 const TOKEN_EXPIRY = '7d'
@@ -101,11 +108,12 @@ export async function getCurrentUser(): Promise<User | null> {
         const payload = await verifyToken(token)
         if (!payload) return null
 
-        const user = await prisma.user.findUnique({
-            where: { id: payload.userId }
-        })
+        const { rows } = await pool.query(
+            'SELECT * FROM users WHERE id = $1',
+            [payload.userId]
+        )
 
-        return user
+        return rows[0] as User || null
     } catch {
         return null
     }

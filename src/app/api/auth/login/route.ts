@@ -1,7 +1,7 @@
 export const runtime = 'edge'
 
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { pool } from '@/lib/edge-db'
 import { comparePassword, generateToken, setAuthCookie } from '@/lib/auth'
 import { isValidEmail } from '@/utils/validators'
 
@@ -26,9 +26,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Find user
-        const user = await prisma.user.findUnique({
-            where: { email: email.toLowerCase() }
-        })
+        const { rows } = await pool.query(
+            'SELECT * FROM users WHERE email = $1',
+            [email.toLowerCase()]
+        )
+        const user = rows[0]
 
         if (!user) {
             return NextResponse.json(

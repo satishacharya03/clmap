@@ -1,7 +1,7 @@
 export const runtime = 'edge'
 
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { pool } from '@/lib/edge-db'
 import { getCurrentUser } from '@/lib/auth'
 import { isValidCoordinates } from '@/utils/validators'
 import { LIVE_LOCATION_CONFIG } from '@/utils/constants'
@@ -35,26 +35,35 @@ export async function POST(request: NextRequest) {
         )
         const expiresAt = new Date(Date.now() + duration * 60 * 1000)
 
-        // Delete any existing location for this user
-        await prisma.liveLocation.deleteMany({
-            where: { userId: user.id }
-        })
+        // Using transaction to replace location
+        await pool.query('BEGIN')
 
-        // Create new live location
-        const location = await prisma.liveLocation.create({
-            data: {
-                userId: user.id,
-                latitude,
-                longitude,
+        try {
+            // Delete any existing location for this user
+            await pool.query(
+                `DELETE FROM live_locations WHERE "userId" = $1`,
+                [user.id]
+            )
+
+            // Create new live location
+            const { rows: locationRows } = await pool.query(
+                `INSERT INTO live_locations (id, "userId", latitude, longitude, "expiresAt", "updatedAt") 
+                 VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW()) 
+                 RETURNING *`,
+                [user.id, latitude, longitude, expiresAt.toISOString()]
+            )
+
+            await pool.query('COMMIT')
+
+            return NextResponse.json({
+                message: 'Location shared successfully',
+                location: locationRows[0],
                 expiresAt
-            }
-        })
-
-        return NextResponse.json({
-            message: 'Location shared successfully',
-            location,
-            expiresAt
-        })
+            })
+        } catch (err) {
+            await pool.query('ROLLBACK')
+            throw err
+        }
     } catch (error) {
         console.error('Error sharing location:', error)
         return NextResponse.json(
@@ -75,9 +84,10 @@ export async function DELETE() {
             )
         }
 
-        await prisma.liveLocation.deleteMany({
-            where: { userId: user.id }
-        })
+        await pool.query(
+            `DELETE FROM live_locations WHERE "userId" = $1`,
+            [user.id]
+        )
 
         return NextResponse.json({
             message: 'Location sharing stopped'

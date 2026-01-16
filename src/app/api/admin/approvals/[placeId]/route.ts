@@ -1,7 +1,7 @@
 export const runtime = 'edge'
 
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { pool } from '@/lib/edge-db'
 import { getCurrentUser, isAdmin } from '@/lib/auth'
 
 // POST /api/admin/approvals/[placeId] - Approve or reject a place
@@ -32,26 +32,35 @@ export async function POST(
         const user = await getCurrentUser()
         const status = action === 'approve' ? 'APPROVED' : 'REJECTED'
 
-        // Update place status
-        const place = await prisma.place.update({
-            where: { id: placeId },
-            data: { approvalStatus: status }
-        })
+        // Transaction for atomicity
+        await pool.query('BEGIN')
 
-        // Update approval record
-        await prisma.approval.update({
-            where: { placeId },
-            data: {
-                status,
-                adminId: user!.id,
-                reviewedAt: new Date()
-            }
-        })
+        try {
+            // Update place status
+            const { rows: placeRows } = await pool.query(
+                `UPDATE places SET "approvalStatus" = $1, "updatedAt" = NOW() WHERE id = $2 RETURNING *`,
+                [status, placeId]
+            )
+            const place = placeRows[0]
 
-        return NextResponse.json({
-            message: `Place ${action}d successfully`,
-            place
-        })
+            // Update approval record
+            await pool.query(
+                `UPDATE approvals 
+                 SET status = $1, "adminId" = $2, "reviewedAt" = NOW(), "updatedAt" = NOW() 
+                 WHERE "placeId" = $3`,
+                [status, user!.id, placeId]
+            )
+
+            await pool.query('COMMIT')
+
+            return NextResponse.json({
+                message: `Place ${action}d successfully`,
+                place
+            })
+        } catch (err) {
+            await pool.query('ROLLBACK')
+            throw err
+        }
     } catch (error) {
         console.error('Error processing approval:', error)
         return NextResponse.json(

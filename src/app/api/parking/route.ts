@@ -1,26 +1,47 @@
 export const runtime = 'edge'
 
 import { NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { pool } from '@/lib/edge-db'
 
 // GET /api/parking - Get parking availability
 export async function GET() {
     try {
-        const parkingAreas = await prisma.parkingArea.findMany({
-            include: {
-                block: true,
-                slots: {
-                    orderBy: { slotNumber: 'asc' }
-                }
-            }
-        })
+        const query = `
+            SELECT 
+                pa.*,
+                to_jsonb(b.*) as block,
+                coalesce(
+                    (SELECT jsonb_agg(ps.* ORDER BY ps."slotNumber" ASC) 
+                     FROM parking_slots ps 
+                     WHERE ps."parkingAreaId" = pa.id),
+                    '[]'::jsonb
+                ) as slots
+            FROM parking_areas pa
+            LEFT JOIN blocks b ON pa."blockId" = b.id
+        `
+        const { rows: parkingAreas } = await pool.query(query)
+
+        interface ParkingSlot {
+            id: string;
+            slotNumber: string;
+            status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED';
+            parkingAreaId: string;
+        }
+
+        interface ParkingArea {
+            id: string;
+            name: string;
+            block: unknown;
+            slots: ParkingSlot[];
+            stats?: unknown;
+        }
 
         // Calculate availability statistics
-        const areasWithStats = parkingAreas.map((area: typeof parkingAreas[number]) => {
+        const areasWithStats = parkingAreas.map((area: ParkingArea) => {
             const totalSlots = area.slots.length
-            const availableSlots = area.slots.filter((s: typeof area.slots[number]) => s.status === 'AVAILABLE').length
-            const occupiedSlots = area.slots.filter((s: typeof area.slots[number]) => s.status === 'OCCUPIED').length
-            const reservedSlots = area.slots.filter((s: typeof area.slots[number]) => s.status === 'RESERVED').length
+            const availableSlots = area.slots.filter((s) => s.status === 'AVAILABLE').length
+            const occupiedSlots = area.slots.filter((s) => s.status === 'OCCUPIED').length
+            const reservedSlots = area.slots.filter((s) => s.status === 'RESERVED').length
 
             return {
                 ...area,

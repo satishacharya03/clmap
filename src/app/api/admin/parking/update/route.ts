@@ -1,7 +1,7 @@
 export const runtime = 'edge'
 
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { pool } from '@/lib/edge-db'
 import { isAdmin } from '@/lib/auth'
 
 // POST /api/admin/parking/update - Update parking slot status
@@ -32,10 +32,11 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const slot = await prisma.parkingSlot.update({
-            where: { id: slotId },
-            data: { status }
-        })
+        const { rows: slotRows } = await pool.query(
+            `UPDATE parking_slots SET status = $1, "updatedAt" = NOW() WHERE id = $2 RETURNING *`,
+            [status, slotId]
+        )
+        const slot = slotRows[0]
 
         return NextResponse.json({
             message: 'Parking slot updated',

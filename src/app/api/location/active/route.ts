@@ -1,7 +1,7 @@
 export const runtime = 'edge'
 
 import { NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { pool } from '@/lib/edge-db'
 import { getCurrentUser } from '@/lib/auth'
 
 // GET /api/location/active - Get active shared locations
@@ -16,17 +16,16 @@ export async function GET() {
         }
 
         // Get all non-expired live locations
-        const activeLocations = await prisma.liveLocation.findMany({
-            where: {
-                expiresAt: { gt: new Date() }
-            },
-            include: {
-                user: {
-                    select: { id: true, name: true }
-                }
-            },
-            orderBy: { createdAt: 'desc' }
-        })
+        const query = `
+            SELECT 
+                ll.*,
+                jsonb_build_object('id', u.id, 'name', u.name) as user
+            FROM live_locations ll
+            JOIN users u ON ll."userId" = u.id
+            WHERE ll."expiresAt" > NOW()
+            ORDER BY ll."createdAt" DESC
+        `
+        const { rows: activeLocations } = await pool.query(query)
 
         return NextResponse.json({ locations: activeLocations })
     } catch (error) {
