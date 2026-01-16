@@ -1,3 +1,5 @@
+export const runtime = 'edge'
+
 import { NextResponse } from 'next/server'
 import { removeAuthCookie } from '@/lib/auth'
 
@@ -14,3 +16,4 @@ export async function POST() {
         )
     }
 }
+
