@@ -51,10 +51,17 @@ export default function MapLibreCampusMap({ onBuildingClick, selectedBuilding, s
             style: 'https://tiles.openfreemap.org/styles/liberty',
             center: CU_CENTER,
             zoom: 16,
+            minZoom: 15,      // Don't zoom out too far
+            maxZoom: 20,      // Max zoom for detail
             pitch: 55,
             bearing: -17.6,
             maxPitch: 85,
-            dragRotate: true
+            dragRotate: true,
+            // Initial bounds restriction
+            maxBounds: [
+                [76.5680, 30.7630],  // SW
+                [76.5850, 30.7750]   // NE
+            ]
         })
 
         map.current.addControl(new maplibregl.NavigationControl({
@@ -140,12 +147,6 @@ export default function MapLibreCampusMap({ onBuildingClick, selectedBuilding, s
                     'line-opacity': 0.9
                 }
             })
-
-            // Also restrict max bounds so user can't pan too far outside campus
-            map.current.setMaxBounds([
-                [76.5650, 30.7600],  // SW corner (slightly outside campus)
-                [76.5880, 30.7780]   // NE corner (slightly outside campus)
-            ])
 
             // ============ ENHANCED ROADS & STREETS ============
             // Make roads more visible with proper styling
