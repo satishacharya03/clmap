@@ -1,10 +1,12 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaNeon } from '@prisma/adapter-neon'
 import { Pool, neonConfig } from '@neondatabase/serverless'
-import ws from 'ws'
 
-// Configure WebSocket for local development and edge compatibility
-neonConfig.webSocketConstructor = ws
+// Configure WebSocket for local development
+if (process.env.NODE_ENV !== 'production') {
+  const ws = require('ws')
+  neonConfig.webSocketConstructor = ws
+}
 
 const connectionString = process.env.DATABASE_URL!
 
