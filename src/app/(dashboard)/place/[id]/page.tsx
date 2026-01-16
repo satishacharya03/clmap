@@ -1,10 +1,28 @@
-export const runtime = 'edge'
+
 
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import prisma from '@/lib/db'
 import Header from '@/components/Header'
+
+export const dynamicParams = true
+
+export async function generateStaticParams() {
+    try {
+        const places = await prisma.place.findMany({
+            where: { approvalStatus: 'APPROVED' },
+            select: { id: true }
+        })
+
+        return places.map((place) => ({
+            id: place.id
+        }))
+    } catch (error) {
+        console.error('Error generating static params:', error)
+        return []
+    }
+}
 
 interface PageProps {
     params: Promise<{ id: string }>

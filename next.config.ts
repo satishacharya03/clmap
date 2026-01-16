@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Cloudflare Pages handles Next.js dynamically
+  // Configured for Vercel deployment
 };
 
 export default nextConfig;
