@@ -1,0 +1,223 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============ ENUMS ============
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ParkingSlotStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+}
+
+// ============ MODELS ============
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  places        Place[]
+  approvals     Approval[]
+  liveLocations LiveLocation[]
+
+  @@map("users")
+}
+
+model Campus {
+  id        String   @id @default(cuid())
+  name      String
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  blocks Block[]
+
+  @@map("campuses")
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  name      String
+  campusId  String
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  campus       Campus        @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  floors       Floor[]
+  places       Place[]
+  parkingAreas ParkingArea[]
+
+  @@map("blocks")
+}
+
+model Floor {
+  id          String   @id @default(cuid())
+  floorNumber Int
+  blockId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  block  Block  @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  rooms  Room[]
+  places Place[]
+
+  @@map("floors")
+}
+
+model Room {
+  id         String   @id @default(cuid())
+  roomNumber String
+  roomType   String?
+  floorId    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  floor  Floor   @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  places Place[]
+
+  @@map("rooms")
+}
+
+model PlaceCategory {
+  id           String   @id @default(cuid())
+  categoryName String   @unique
+  icon         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  places Place[]
+
+  @@map("place_categories")
+}
+
+model Place {
+  id             String         @id @default(cuid())
+  name           String
+  description    String?
+  latitude       Float?
+  longitude      Float?
+  approvalStatus ApprovalStatus @default(PENDING)
+  categoryId     String
+  blockId        String?
+  floorId        String?
+  roomId         String?
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relations
+  category  PlaceCategory @relation(fields: [categoryId], references: [id])
+  block     Block?        @relation(fields: [blockId], references: [id])
+  floor     Floor?        @relation(fields: [floorId], references: [id])
+  room      Room?         @relation(fields: [roomId], references: [id])
+  createdBy User          @relation(fields: [createdById], references: [id])
+  photos    PlacePhoto[]
+  approval  Approval?
+
+  @@map("places")
+}
+
+model PlacePhoto {
+  id        String   @id @default(cuid())
+  photoUrl  String
+  placeId   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  place Place @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@map("place_photos")
+}
+
+model Approval {
+  id         String         @id @default(cuid())
+  placeId    String         @unique
+  adminId    String?
+  status     ApprovalStatus @default(PENDING)
+  reviewedAt DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  // Relations
+  place Place @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  admin User? @relation(fields: [adminId], references: [id])
+
+  @@map("approvals")
+}
+
+model ParkingArea {
+  id        String   @id @default(cuid())
+  name      String
+  blockId   String
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  block Block         @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  slots ParkingSlot[]
+
+  @@map("parking_areas")
+}
+
+model ParkingSlot {
+  id            String            @id @default(cuid())
+  slotNumber    String
+  status        ParkingSlotStatus @default(AVAILABLE)
+  parkingAreaId String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  // Relations
+  parkingArea ParkingArea @relation(fields: [parkingAreaId], references: [id], onDelete: Cascade)
+
+  @@map("parking_slots")
+}
+
+model LiveLocation {
+  id        String   @id @default(cuid())
+  userId    String
+  latitude  Float
+  longitude Float
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("live_locations")
+}
