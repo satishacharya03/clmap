@@ -30,6 +30,8 @@ export default function AdminParkingPage() {
     const [selectedArea, setSelectedArea] = useState<string | null>(null)
     const [updatingSlot, setUpdatingSlot] = useState<string | null>(null)
 
+    const [error, setError] = useState<string | null>(null)
+
     useEffect(() => {
         fetchParkingData()
     }, [])
@@ -37,6 +39,10 @@ export default function AdminParkingPage() {
     const fetchParkingData = async () => {
         try {
             const res = await fetch('/api/parking')
+            if (res.status === 403) {
+                setError('Access Denied. You do not have permission to manage parking.')
+                return
+            }
             const data = await res.json()
             setParkingAreas(data.parkingAreas || [])
             if (data.parkingAreas?.length > 0) {
@@ -44,6 +50,7 @@ export default function AdminParkingPage() {
             }
         } catch (error) {
             console.error('Error fetching parking data:', error)
+            setError('Failed to fetch parking data.')
         } finally {
             setIsLoading(false)
         }
@@ -59,7 +66,7 @@ export default function AdminParkingPage() {
             })
 
             if (res.status === 403) {
-                router.push('/map')
+                setError('Access Denied. You do not have permission to modify parking.')
                 return
             }
 
@@ -124,7 +131,13 @@ export default function AdminParkingPage() {
                         Click on slots to toggle their status
                     </p>
 
-                    {isLoading ? (
+                    {error ? (
+                        <div className="text-center py-20 bg-white rounded-3xl border border-red-200">
+                            <span className="text-5xl mb-4 block">🚫</span>
+                            <h3 className="text-xl font-bold text-red-500 mb-2">Access Denied</h3>
+                            <p className="text-red-400/80">{error}</p>
+                        </div>
+                    ) : isLoading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
                         </div>
@@ -142,8 +155,8 @@ export default function AdminParkingPage() {
                                         key={area.id}
                                         onClick={() => setSelectedArea(area.id)}
                                         className={`flex-shrink-0 px-4 py-3 rounded-xl transition-all ${selectedArea === area.id
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-white border border-gray-200 text-gray-700 hover:border-blue-300'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-white border border-gray-200 text-gray-700 hover:border-blue-300'
                                             }`}
                                     >
                                         <div className="font-medium">{area.name}</div>

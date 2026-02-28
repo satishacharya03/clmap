@@ -10,8 +10,20 @@ export default function UsersAdminPage() {
     const [processing, setProcessing] = useState<string | null>(null)
     const [search, setSearch] = useState('')
 
+    const [error, setError] = useState<string | null>(null)
+
     useEffect(() => {
-        fetch('/api/admin/users').then(r => r.json()).then(d => setUsers(d.users || [])).finally(() => setLoading(false))
+        fetch('/api/admin/users')
+            .then(r => {
+                if (r.status === 403) {
+                    setError('Access Denied. You do not have permission to manage users.')
+                    return null
+                }
+                return r.json()
+            })
+            .then(d => d && setUsers(d.users || []))
+            .catch(() => setError('Failed to load users.'))
+            .finally(() => setLoading(false))
     }, [])
 
     const changeRole = async (userId: string, role: 'USER' | 'ADMIN') => {
@@ -40,7 +52,13 @@ export default function UsersAdminPage() {
                 className="w-full mb-5 px-4 py-3 rounded-xl text-sm text-white placeholder-white/30 outline-none focus:ring-1 focus:ring-indigo-500/50"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }} />
 
-            {loading ? (
+            {error ? (
+                <div className="text-center py-20 rounded-3xl" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <p className="text-5xl mb-4">🚫</p>
+                    <h3 className="text-xl font-bold text-red-400 mb-2">Access Denied</h3>
+                    <p className="text-red-400/60">{error}</p>
+                </div>
+            ) : loading ? (
                 <div className="space-y-2">{Array(5).fill(null).map((_, i) => <div key={i} className="h-16 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />)}</div>
             ) : (
                 <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>

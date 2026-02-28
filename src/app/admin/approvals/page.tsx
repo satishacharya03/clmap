@@ -23,10 +23,19 @@ export default function ApprovalsPage() {
     const [processingId, setProcessingId] = useState<string | null>(null)
     const [selected, setSelected] = useState<Place | null>(null)
 
+    const [error, setError] = useState<string | null>(null)
+
     useEffect(() => {
         fetch('/api/admin/approvals')
-            .then(r => { if (r.status === 403) { router.push('/map'); return null } return r.json() })
+            .then(r => {
+                if (r.status === 403) {
+                    setError('Access Denied. You do not have permission to view pending approvals.');
+                    return null;
+                }
+                return r.json()
+            })
             .then(d => d && setPlaces(d.places || []))
+            .catch(e => setError('Failed to load approvals.'))
             .finally(() => setLoading(false))
     }, [router])
 
@@ -54,7 +63,13 @@ export default function ApprovalsPage() {
                 </span>
             </div>
 
-            {loading ? (
+            {error ? (
+                <div className="text-center py-20 rounded-3xl" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <p className="text-5xl mb-4">🚫</p>
+                    <h3 className="text-xl font-bold text-red-400 mb-2">Access Denied</h3>
+                    <p className="text-red-400/60">{error}</p>
+                </div>
+            ) : loading ? (
                 <div className="space-y-3">
                     {Array(3).fill(null).map((_, i) => <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />)}
                 </div>

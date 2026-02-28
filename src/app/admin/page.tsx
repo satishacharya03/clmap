@@ -29,8 +29,20 @@ export default function AdminDashboard() {
     const [stats, setStats] = useState<Stats | null>(null)
     const [loading, setLoading] = useState(true)
 
+    const [error, setError] = useState<string | null>(null)
+
     useEffect(() => {
-        fetch('/api/admin/stats').then(r => r.json()).then(d => setStats(d)).finally(() => setLoading(false))
+        fetch('/api/admin/stats')
+            .then(r => {
+                if (r.status === 403) {
+                    setError('Access Denied. You do not have permission to view the admin dashboard.')
+                    return null
+                }
+                return r.json()
+            })
+            .then(d => d && setStats(d))
+            .catch(e => setError('Failed to load dashboard stats.'))
+            .finally(() => setLoading(false))
     }, [])
 
     return (
@@ -42,18 +54,26 @@ export default function AdminDashboard() {
             </div>
 
             {/* Stats grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                {loading ? (
-                    Array(4).fill(null).map((_, i) => (
-                        <div key={i} className="h-36 rounded-2xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />
-                    ))
-                ) : <>
-                    <StatCard icon="📍" label="Approved Places" value={stats?.approvedPlaces ?? 0} color="#10b981" href="/admin/places" />
-                    <StatCard icon="⏳" label="Pending Review" value={stats?.pendingPlaces ?? 0} color="#f59e0b" href="/admin/approvals" />
-                    <StatCard icon="🏷️" label="Categories" value={stats?.categories ?? 0} color="#6366f1" href="/admin/categories" />
-                    <StatCard icon="👥" label="Users" value={stats?.users ?? 0} color="#8b5cf6" href="/admin/users" />
-                </>}
-            </div>
+            {error ? (
+                <div className="text-center py-20 rounded-3xl mb-8" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <p className="text-5xl mb-4">🚫</p>
+                    <h3 className="text-xl font-bold text-red-400 mb-2">Access Denied</h3>
+                    <p className="text-red-400/60">{error}</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    {loading ? (
+                        Array(4).fill(null).map((_, i) => (
+                            <div key={i} className="h-36 rounded-2xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />
+                        ))
+                    ) : <>
+                        <StatCard icon="📍" label="Approved Places" value={stats?.approvedPlaces ?? 0} color="#10b981" href="/admin/places" />
+                        <StatCard icon="⏳" label="Pending Review" value={stats?.pendingPlaces ?? 0} color="#f59e0b" href="/admin/approvals" />
+                        <StatCard icon="🏷️" label="Categories" value={stats?.categories ?? 0} color="#6366f1" href="/admin/categories" />
+                        <StatCard icon="👥" label="Users" value={stats?.users ?? 0} color="#8b5cf6" href="/admin/users" />
+                    </>}
+                </div>
+            )}
 
             {/* Quick actions */}
             <div className="mb-6">

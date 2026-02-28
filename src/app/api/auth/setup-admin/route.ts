@@ -30,9 +30,22 @@ export async function POST() {
             [user.id]
         )
 
+        const updatedUser = rows[0]
+
+        // Import missing functions for token generation dynamically if not imported
+        const { generateToken, setAuthCookie } = await import('@/lib/auth')
+
+        // Generate token and set cookie
+        const token = await generateToken({
+            userId: updatedUser.id,
+            email: updatedUser.email,
+            role: updatedUser.role
+        })
+        await setAuthCookie(token)
+
         return NextResponse.json({
-            message: `✅ ${rows[0].name} is now an ADMIN. Refresh the page to activate admin features.`,
-            user: rows[0]
+            message: `✅ ${updatedUser.name} is now an ADMIN. Refresh the page to activate admin features.`,
+            user: updatedUser
         })
     } catch (error) {
         console.error('Setup admin error:', error)

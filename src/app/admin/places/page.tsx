@@ -20,8 +20,20 @@ export default function PlacesAdminPage() {
     const [search, setSearch] = useState('')
     const [processing, setProcessing] = useState<string | null>(null)
 
+    const [error, setError] = useState<string | null>(null)
+
     useEffect(() => {
-        fetch('/api/admin/places').then(r => r.json()).then(d => setPlaces(d.places || [])).finally(() => setLoading(false))
+        fetch('/api/admin/places')
+            .then(r => {
+                if (r.status === 403) {
+                    setError('Access Denied. You do not have permission to manage places.')
+                    return null
+                }
+                return r.json()
+            })
+            .then(d => d && setPlaces(d.places || []))
+            .catch(() => setError('Failed to load places.'))
+            .finally(() => setLoading(false))
     }, [])
 
     const changeStatus = async (placeId: string, approvalStatus: string) => {
@@ -72,7 +84,13 @@ export default function PlacesAdminPage() {
                 ))}
             </div>
 
-            {loading ? (
+            {error ? (
+                <div className="text-center py-20 rounded-3xl" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <p className="text-5xl mb-4">🚫</p>
+                    <h3 className="text-xl font-bold text-red-400 mb-2">Access Denied</h3>
+                    <p className="text-red-400/60">{error}</p>
+                </div>
+            ) : loading ? (
                 <div className="space-y-2">{Array(5).fill(null).map((_, i) => <div key={i} className="h-16 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />)}</div>
             ) : (
                 <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>

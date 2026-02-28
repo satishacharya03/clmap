@@ -13,10 +13,22 @@ export default function CategoriesAdminPage() {
     const [name, setName] = useState('')
     const [icon, setIcon] = useState('📍')
     const [creating, setCreating] = useState(false)
-    const [error, setError] = useState('')
+    const [error, setError] = useState<string | null>(null)
     const [deletingId, setDeletingId] = useState<string | null>(null)
 
-    const load = () => fetch('/api/categories').then(r => r.json()).then(d => setCategories(d.categories || [])).finally(() => setLoading(false))
+    const load = () => {
+        fetch('/api/categories')
+            .then(r => {
+                if (r.status === 403) {
+                    setError('Access Denied. You do not have permission to manage categories.')
+                    return null
+                }
+                return r.json()
+            })
+            .then(d => d && setCategories(d.categories || []))
+            .catch(() => setError('Failed to load categories.'))
+            .finally(() => setLoading(false))
+    }
     useEffect(() => { load() }, [])
 
     const createCat = async (e: FormEvent) => {
@@ -88,7 +100,13 @@ export default function CategoriesAdminPage() {
             )}
 
             {/* Category grid */}
-            {loading ? (
+            {error && !categories.length ? (
+                <div className="text-center py-20 rounded-3xl" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <p className="text-5xl mb-4">🚫</p>
+                    <h3 className="text-xl font-bold text-red-400 mb-2">Access Denied</h3>
+                    <p className="text-red-400/60">{error}</p>
+                </div>
+            ) : loading ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{Array(6).fill(null).map((_, i) => <div key={i} className="h-20 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />)}</div>
             ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">

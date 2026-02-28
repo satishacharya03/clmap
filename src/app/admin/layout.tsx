@@ -1,5 +1,7 @@
+'use client'
+
 import Link from 'next/link'
-import { headers } from 'next/headers'
+import { useRouter } from 'next/navigation'
 
 const navItems = [
     { href: '/admin', label: 'Dashboard', icon: '📊', exact: true },
@@ -10,7 +12,14 @@ const navItems = [
     { href: '/admin/manage-parking', label: 'Parking', icon: '🅿️' },
 ]
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+    const router = useRouter()
+
+    const handleLogout = async () => {
+        await fetch('/api/auth/logout', { method: 'POST' })
+        router.push('/login')
+    }
+
     return (
         <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)' }}>
             {/* Sidebar */}
@@ -50,10 +59,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                         className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-white/50 hover:text-white hover:bg-white/6 transition-all">
                         <span>🗺️</span> View Map
                     </Link>
-                    <Link href="/api/auth/logout"
-                        className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-red-400/70 hover:text-red-300 hover:bg-red-500/8 transition-all">
+                    <button onClick={handleLogout}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-red-400/70 hover:text-red-300 hover:bg-red-500/8 transition-all text-left">
                         <span>🚪</span> Sign Out
-                    </Link>
+                    </button>
                 </div>
             </aside>
 

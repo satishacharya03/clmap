@@ -17,3 +17,14 @@ export async function POST() {
     }
 }
 
+// GET /api/auth/logout - Logout user via link
+export async function GET(request: Request) {
+    try {
+        await removeAuthCookie()
+        return NextResponse.redirect(new URL('/login', request.url))
+    } catch (error) {
+        console.error('Logout error:', error)
+        return NextResponse.redirect(new URL('/login', request.url))
+    }
+}
+

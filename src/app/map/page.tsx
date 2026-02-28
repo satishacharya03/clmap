@@ -80,22 +80,19 @@ export default function MapPage() {
     useEffect(() => {
         const load = async () => {
             try {
-                const [placesRes, catRes, blocksRes, meRes] = await Promise.all([
-                    fetch('/api/places'),
-                    fetch('/api/categories'),
-                    fetch('/api/blocks'),
-                    fetch('/api/auth/me')
+                // Fetch independently to prevent auth fail from breaking places
+                const [placesRes, catRes, blocksRes, meRes] = await Promise.allSettled([
+                    fetch('/api/places').then(r => r.json()),
+                    fetch('/api/categories').then(r => r.json()),
+                    fetch('/api/blocks').then(r => r.ok ? r.json() : { blocks: [] }),
+                    fetch('/api/auth/me').then(r => r.ok ? r.json() : { user: null })
                 ])
-                const [pd, cd, bd] = await Promise.all([
-                    placesRes.json(), catRes.json(), blocksRes.ok ? blocksRes.json() : { blocks: [] }
-                ])
-                setPlaces(pd.places || [])
-                setCategories(cd.categories || [])
-                setBlocks(bd.blocks || [])
-                if (meRes.ok) {
-                    const md = await meRes.json()
-                    setCurrentUser(md.user || null)
-                }
+
+                if (placesRes.status === 'fulfilled') setPlaces(placesRes.value.places || [])
+                if (catRes.status === 'fulfilled') setCategories(catRes.value.categories || [])
+                if (blocksRes.status === 'fulfilled') setBlocks(blocksRes.value.blocks || [])
+                if (meRes.status === 'fulfilled') setCurrentUser(meRes.value.user || null)
+
             } catch (e) {
                 console.error(e)
             } finally {
