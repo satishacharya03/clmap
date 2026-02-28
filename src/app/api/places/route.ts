@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     }
 }
 
-// POST /api/places - Submit a new place (authenticated users)
+// POST /api/places - Submit a new place (must be logged in)
 export async function POST(request: NextRequest) {
     try {
         const user = await getCurrentUser()

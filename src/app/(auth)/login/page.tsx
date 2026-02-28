@@ -2,34 +2,35 @@
 
 import { useState, FormEvent } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function LoginPage() {
+function LoginForm() {
     const router = useRouter()
+    const searchParams = useSearchParams()
+    const redirectTo = searchParams.get('redirect') || '/map'
+
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [isLoading, setIsLoading] = useState(false)
+    const [adminMsg, setAdminMsg] = useState('')
+    const [adminLoading, setAdminLoading] = useState(false)
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault()
         setError('')
         setIsLoading(true)
-
         try {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             })
-
             const data = await res.json()
-
-            if (!res.ok) {
-                throw new Error(data.error || 'Login failed')
-            }
-
-            router.push('/map')
+            if (!res.ok) throw new Error(data.error || 'Login failed')
+            router.push(redirectTo)
+            router.refresh()
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Login failed')
         } finally {
@@ -37,100 +38,115 @@ export default function LoginPage() {
         }
     }
 
+    const handleMakeAdmin = async () => {
+        setAdminLoading(true)
+        setAdminMsg('')
+        try {
+            const res = await fetch('/api/auth/setup-admin', { method: 'POST' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error)
+            setAdminMsg(data.message)
+        } catch (err) {
+            setAdminMsg(err instanceof Error ? err.message : 'Failed')
+        } finally {
+            setAdminLoading(false)
+        }
+    }
+
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-4">
-            <div className="w-full max-w-md">
+        <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' }}>
+            {/* Background decoration */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, #6366f1, transparent)' }} />
+                <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, #8b5cf6, transparent)' }} />
+            </div>
+
+            <div className="w-full max-w-md relative z-10">
                 {/* Logo */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center gap-3 mb-2">
-                        <span className="text-4xl">🏫</span>
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                            CampusNav
-                        </h1>
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4"
+                        style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 8px 32px rgba(99,102,241,0.4)' }}>
+                        <span className="text-3xl">🏫</span>
                     </div>
-                    <p className="text-gray-500">Smart Campus Navigation Platform</p>
+                    <h1 className="text-3xl font-bold text-white">CampusNav</h1>
+                    <p className="text-white/50 mt-1 text-sm">Chandigarh University · Smart Map</p>
                 </div>
 
-                {/* Login Card */}
-                <div className="bg-white rounded-2xl shadow-xl p-8">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-6">Welcome back</h2>
+                {/* Card */}
+                <div className="rounded-3xl p-8" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(20px)' }}>
+                    <h2 className="text-xl font-bold text-white mb-6">Sign in to your account</h2>
 
                     {error && (
-                        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-                            {error}
+                        <div className="mb-5 flex items-center gap-2.5 bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-red-300 text-sm">
+                            <span>⚠️</span> {error}
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="space-y-5">
+                    <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                                Email
-                            </label>
+                            <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">Email</label>
                             <input
-                                id="email"
                                 type="email"
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={e => setEmail(e.target.value)}
                                 required
-                                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
                                 placeholder="you@campus.edu"
+                                className="w-full px-4 py-3.5 rounded-2xl border border-white/10 bg-white/5 text-white placeholder-white/25 focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/60 outline-none text-sm transition-all"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                                Password
-                            </label>
+                            <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">Password</label>
                             <input
-                                id="password"
                                 type="password"
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                onChange={e => setPassword(e.target.value)}
                                 required
-                                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
                                 placeholder="••••••••"
+                                className="w-full px-4 py-3.5 rounded-2xl border border-white/10 bg-white/5 text-white placeholder-white/25 focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/60 outline-none text-sm transition-all"
                             />
                         </div>
 
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-3.5 text-white font-bold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-98 text-sm mt-2"
+                            style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 8px 24px rgba(99,102,241,0.4)' }}
                         >
                             {isLoading ? (
                                 <span className="flex items-center justify-center gap-2">
-                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                     </svg>
                                     Signing in...
                                 </span>
-                            ) : (
-                                'Sign in'
-                            )}
+                            ) : 'Sign In →'}
                         </button>
                     </form>
 
                     <div className="mt-6 text-center">
-                        <p className="text-gray-600">
-                            Don&apos;t have an account?{' '}
-                            <Link href="/register" className="text-blue-600 font-medium hover:underline">
-                                Sign up
+                        <p className="text-white/50 text-sm">
+                            No account?{' '}
+                            <Link href="/register" className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">
+                                Create one free
                             </Link>
                         </p>
                     </div>
                 </div>
 
-                {/* Demo credentials */}
-                <div className="mt-6 p-4 bg-blue-50 rounded-xl text-center">
-                    <p className="text-sm text-blue-800">
-                        <strong>Demo Admin:</strong> admin@campus.edu / admin123
-                    </p>
-                    <p className="text-sm text-blue-600 mt-1">
-                        <strong>Demo User:</strong> student@campus.edu / user123
-                    </p>
-                </div>
+                <p className="text-center text-white/20 text-xs mt-5">
+                    Chandigarh University Campus Navigation System
+                </p>
             </div>
         </div>
+    )
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense>
+            <LoginForm />
+        </Suspense>
     )
 }
