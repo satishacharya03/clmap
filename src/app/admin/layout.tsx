@@ -7,7 +7,7 @@ const navItems = [
     { href: '/admin/places', label: 'All Places', icon: '📍' },
     { href: '/admin/categories', label: 'Categories', icon: '🏷️' },
     { href: '/admin/users', label: 'Users', icon: '👥' },
-    { href: '/admin/parking', label: 'Parking', icon: '🅿️' },
+    { href: '/admin/manage-parking', label: 'Parking', icon: '🅿️' },
 ]
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

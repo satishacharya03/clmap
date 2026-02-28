@@ -84,7 +84,7 @@ export default function AdminDashboard() {
                     style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
                     🗺️ View Map
                 </Link>
-                <Link href="/admin/parking"
+                <Link href="/admin/manage-parking"
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white transition-all"
                     style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
                     🅿️ Parking Management

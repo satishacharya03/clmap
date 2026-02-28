@@ -98,7 +98,7 @@ The application uses **PostgreSQL (Neon DB)** for structured relational data, **
 * GET /api/places
 * GET /api/places/[id]
 * POST /api/places (user submission)
-* PUT /api/places/[id] (admin)
+* PUT /api/places/[id] admin
 
 ### Categories
 
@@ -125,17 +125,17 @@ The application uses **PostgreSQL (Neon DB)** for structured relational data, **
 
 ```
 /app
-  /(auth)
+  /auth
     login/page.tsx
     register/page.tsx
 
-  /(dashboard)
+  /dashboard
     map/page.tsx
     place/[id]/page.tsx
     add-place/page.tsx
     parking/page.tsx
 
-  /(admin)
+  /admin
     approvals/page.tsx
     parking/page.tsx
 
