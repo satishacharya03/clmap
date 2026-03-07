@@ -44,6 +44,7 @@ model User {
   places        Place[]
   approvals     Approval[]
   liveLocations LiveLocation[]
+  reviews       Review[]
 
   @@map("users")
 }
@@ -134,6 +135,9 @@ model Place {
   blockId        String?
   floorId        String?
   roomId         String?
+  phone          String?
+  website        String?
+  openingHours   String?
   createdById    String
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -145,6 +149,7 @@ model Place {
   room      Room?         @relation(fields: [roomId], references: [id])
   createdBy User          @relation(fields: [createdById], references: [id])
   photos    PlacePhoto[]
+  reviews   Review[]
   approval  Approval?
 
   @@map("places")
@@ -176,6 +181,22 @@ model Approval {
   admin User? @relation(fields: [adminId], references: [id])
 
   @@map("approvals")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  rating    Int
+  comment   String?
+  placeId   String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  place Place @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
 }
 
 model ParkingArea {

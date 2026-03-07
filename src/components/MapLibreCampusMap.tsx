@@ -237,6 +237,16 @@ export default function MapLibreCampusMap({
 
         map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), 'bottom-right')
 
+        // Handle missing style images (like "sports_centre") to prevent console warnings
+        map.current.on('styleimagemissing', (e) => {
+            const id = e.id;
+            // Create a transparent 1x1 pixel image
+            const width = 1;
+            const height = 1;
+            const data = new Uint8Array(width * height * 4);
+            map.current?.addImage(id, { width, height, data });
+        });
+
         map.current.on('load', () => {
             if (!map.current) return
             setupCustomLayers(map.current)

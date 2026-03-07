@@ -199,3 +199,5 @@ export async function PUT(
         )
     }
 }
+
+export const runtime = 'edge';

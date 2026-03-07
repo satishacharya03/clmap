@@ -49,3 +49,6 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Server error' }, { status: 500 })
     }
 }
+
+export const runtime = 'edge';
+
