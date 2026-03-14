@@ -365,13 +365,14 @@ export default function MapLibreCampusMap({
             const el = document.createElement('div')
             el.className = 'place-marker'
             el.style.cssText = `
-                width: 40px;
-                height: 48px;
+                width: 36px;
+                height: 42px;
                 cursor: pointer;
                 position: relative;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
+                justify-content: flex-end;
             `
             const inner = document.createElement('div')
             inner.style.cssText = `
@@ -380,6 +381,7 @@ export default function MapLibreCampusMap({
                 align-items: center;
                 transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
                 filter: drop-shadow(0 4px 8px rgba(0,0,0,0.35));
+                transform-origin: bottom center;
             `
             inner.innerHTML = `
                 <div style="
@@ -402,14 +404,14 @@ export default function MapLibreCampusMap({
                     height: 4px;
                     background: ${color};
                     border-radius: 50%;
-                    margin-top: 2px;
+                    margin-top: -2px;
                     opacity: 0.6;
                 "></div>
             `
             el.appendChild(inner)
 
             el.addEventListener('mouseenter', () => {
-                inner.style.transform = 'scale(1.25) translateY(-4px)'
+                inner.style.transform = 'scale(1.2) translateY(-4px)'
             })
             el.addEventListener('mouseleave', () => {
                 inner.style.transform = 'scale(1) translateY(0)'
