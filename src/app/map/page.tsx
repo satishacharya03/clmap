@@ -433,8 +433,9 @@ export default function MapPage() {
                             <div className="flex gap-2.5">
                                 <button
                                     onClick={() => {
-                                        if (selectedPlace.latitude && selectedPlace.longitude)
-                                            setFlyToPlace({ ...selectedPlace, latitude: selectedPlace.latitude + 0.00001 })
+                                        if (selectedPlace.latitude && selectedPlace.longitude) {
+                                            setFlyToPlace(selectedPlace)
+                                        }
                                     }}
                                     className="flex-1 py-3 text-sm font-semibold text-white rounded-xl flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
                                     style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 4px 16px rgba(99,102,241,0.4)' }}

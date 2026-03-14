@@ -242,7 +242,8 @@ export default function MapLibreCampusMap({
 
         const gc = new maplibregl.GeolocateControl({
             positionOptions: { enableHighAccuracy: true },
-            trackUserLocation: true
+            trackUserLocation: true,
+            showAccuracyCircle: false
         })
         map.current.addControl(gc, 'bottom-right')
 
@@ -593,13 +594,15 @@ export default function MapLibreCampusMap({
 
     useEffect(() => {
         const checkAndDraw = () => {
-            if (selectedPlace?.latitude && selectedPlace?.longitude) {
+            // We use flyToPlace as the trigger source so it also triggers when user hits "Fly To" in UI
+            const targetPlace = flyToPlace || selectedPlace;
+            if (targetPlace?.latitude && targetPlace?.longitude) {
                 if (userLocation.current) {
-                    drawRoute(selectedPlace.latitude, selectedPlace.longitude)
+                    drawRoute(targetPlace.latitude, targetPlace.longitude)
                 } else {
                     navigator.geolocation.getCurrentPosition((pos) => {
                         userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-                        drawRoute(selectedPlace.latitude!, selectedPlace.longitude!)
+                        drawRoute(targetPlace.latitude!, targetPlace.longitude!)
                     }, () => {
                         console.log('Location not available')
                     }, { enableHighAccuracy: true })
@@ -612,7 +615,7 @@ export default function MapLibreCampusMap({
         const onUpdate = () => checkAndDraw()
         window.addEventListener('userLocationUpdate', onUpdate)
         return () => window.removeEventListener('userLocationUpdate', onUpdate)
-    }, [selectedPlace, drawRoute, handleRemoveRoute])
+    }, [selectedPlace, flyToPlace, drawRoute, handleRemoveRoute])
 
     return (
         <div className="w-full h-full relative">
