@@ -248,6 +248,7 @@ export default function MapPage() {
                     searchQuery={searchQuery}
                     pinDropMode={addMode === 'pin-drop'}
                     flyToPlace={flyToPlace}
+                    selectedPlace={selectedPlace}
                     onMapClick={handleMapClick}
                     onPlaceClick={handlePlaceClick}
                 />

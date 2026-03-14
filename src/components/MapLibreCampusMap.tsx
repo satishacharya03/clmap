@@ -67,6 +67,7 @@ interface Props {
     searchQuery?: string
     pinDropMode?: boolean
     flyToPlace?: Place | null
+    selectedPlace?: Place | null
     onMapClick?: (lat: number, lng: number) => void
     onPlaceClick?: (place: Place) => void
 }
@@ -78,6 +79,7 @@ export default function MapLibreCampusMap({
     searchQuery = '',
     pinDropMode = false,
     flyToPlace,
+    selectedPlace,
     onMapClick,
     onPlaceClick,
 }: Props) {
@@ -90,6 +92,7 @@ export default function MapLibreCampusMap({
     const [mapLoaded, setMapLoaded] = useState(false)
     const [isSatellite, setIsSatellite] = useState(false)
     const layersAdded = useRef(false)
+    const userLocation = useRef<{ lat: number; lng: number } | null>(null)
 
     // Map from category id to stable color
     const categoryColorMap = useRef<Map<string, string>>(new Map())
@@ -237,6 +240,17 @@ export default function MapLibreCampusMap({
 
         map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), 'bottom-right')
 
+        const gc = new maplibregl.GeolocateControl({
+            positionOptions: { enableHighAccuracy: true },
+            trackUserLocation: true
+        })
+        map.current.addControl(gc, 'bottom-right')
+
+        gc.on('geolocate', (e: any) => {
+            userLocation.current = { lat: e.coords.latitude, lng: e.coords.longitude }
+            window.dispatchEvent(new CustomEvent('userLocationUpdate'))
+        })
+
         // Handle missing style images (like "sports_centre") to prevent console warnings
         map.current.on('styleimagemissing', (e) => {
             const id = e.id;
@@ -357,10 +371,16 @@ export default function MapLibreCampusMap({
                 display: flex;
                 flex-direction: column;
                 align-items: center;
+            `
+            const inner = document.createElement('div')
+            inner.style.cssText = `
+                display: flex;
+                flex-direction: column;
+                align-items: center;
                 transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
                 filter: drop-shadow(0 4px 8px rgba(0,0,0,0.35));
             `
-            el.innerHTML = `
+            inner.innerHTML = `
                 <div style="
                     width: 36px;
                     height: 36px;
@@ -385,12 +405,13 @@ export default function MapLibreCampusMap({
                     opacity: 0.6;
                 "></div>
             `
+            el.appendChild(inner)
 
             el.addEventListener('mouseenter', () => {
-                el.style.transform = 'scale(1.25) translateY(-4px)'
+                inner.style.transform = 'scale(1.25) translateY(-4px)'
             })
             el.addEventListener('mouseleave', () => {
-                el.style.transform = 'scale(1) translateY(0)'
+                inner.style.transform = 'scale(1) translateY(0)'
             })
             el.addEventListener('click', (e) => {
                 e.stopPropagation()
@@ -512,6 +533,86 @@ export default function MapLibreCampusMap({
             if (animationRef.current) cancelAnimationFrame(animationRef.current)
         }
     }, [isFirstPerson, moveCamera])
+
+    const handleRemoveRoute = useCallback(() => {
+        if (!map.current) return
+        if (map.current.getSource('route')) {
+            (map.current.getSource('route') as maplibregl.GeoJSONSource).setData({
+                type: 'Feature',
+                properties: {},
+                geometry: { type: 'LineString', coordinates: [] }
+            })
+        }
+    }, [])
+
+    const drawRoute = useCallback(async (endLat: number, endLng: number) => {
+        if (!map.current || !userLocation.current) return
+        try {
+            const start = userLocation.current
+            const res = await fetch(`https://router.project-osrm.org/route/v1/foot/${start.lng},${start.lat};${endLng},${endLat}?geometries=geojson`)
+            if (!res.ok) return
+            const data = await res.json()
+            if (data.routes && data.routes.length > 0) {
+                const route = data.routes[0].geometry
+                
+                if (map.current.getSource('route')) {
+                    (map.current.getSource('route') as maplibregl.GeoJSONSource).setData({
+                        type: 'Feature',
+                        properties: {},
+                        geometry: route
+                    })
+                } else {
+                    map.current.addSource('route', {
+                        type: 'geojson',
+                        data: {
+                            type: 'Feature',
+                            properties: {},
+                            geometry: route
+                        }
+                    })
+                    map.current.addLayer({
+                        id: 'route-line-outline',
+                        type: 'line',
+                        source: 'route',
+                        layout: { 'line-join': 'round', 'line-cap': 'round' },
+                        paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 }
+                    })
+                    map.current.addLayer({
+                        id: 'route-line',
+                        type: 'line',
+                        source: 'route',
+                        layout: { 'line-join': 'round', 'line-cap': 'round' },
+                        paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 1 }
+                    })
+                }
+            }
+        } catch (err) {
+            console.error('Routing error', err)
+        }
+    }, [])
+
+    useEffect(() => {
+        const checkAndDraw = () => {
+            if (selectedPlace?.latitude && selectedPlace?.longitude) {
+                if (userLocation.current) {
+                    drawRoute(selectedPlace.latitude, selectedPlace.longitude)
+                } else {
+                    navigator.geolocation.getCurrentPosition((pos) => {
+                        userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+                        drawRoute(selectedPlace.latitude!, selectedPlace.longitude!)
+                    }, () => {
+                        console.log('Location not available')
+                    }, { enableHighAccuracy: true })
+                }
+            } else {
+                handleRemoveRoute()
+            }
+        }
+        checkAndDraw()
+        const onUpdate = () => checkAndDraw()
+        window.addEventListener('userLocationUpdate', onUpdate)
+        return () => window.removeEventListener('userLocationUpdate', onUpdate)
+    }, [selectedPlace, drawRoute, handleRemoveRoute])
 
     return (
         <div className="w-full h-full relative">
