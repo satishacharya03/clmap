@@ -50,30 +50,13 @@ export async function POST(
             return NextResponse.json({ error: 'Place not found' }, { status: 404 })
         }
 
-        // Check if user already reviewed
-        const { rows: existingReview } = await pool.query(
-            `SELECT id FROM reviews WHERE "placeId" = $1 AND "userId" = $2`,
-            [placeId, user.id]
+        // Create new review
+        const { rows } = await pool.query(
+            `INSERT INTO reviews (id, rating, comment, "placeId", "userId", "updatedAt") 
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW()) RETURNING *`,
+            [rating, comment?.trim() || null, placeId, user.id]
         )
-
-        let reviewRow;
-
-        if (existingReview.length > 0) {
-            // Update existing review
-            const { rows } = await pool.query(
-                `UPDATE reviews SET rating = $1, comment = $2, "updatedAt" = NOW() WHERE id = $3 RETURNING *`,
-                [rating, comment?.trim() || null, existingReview[0].id]
-            )
-            reviewRow = rows[0]
-        } else {
-            // Create new review
-            const { rows } = await pool.query(
-                `INSERT INTO reviews (id, rating, comment, "placeId", "userId", "updatedAt") 
-                 VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW()) RETURNING *`,
-                [rating, comment?.trim() || null, placeId, user.id]
-            )
-            reviewRow = rows[0]
-        }
+        const reviewRow = rows[0]
 
         // Include user object to return
         const reviewWithUser = {

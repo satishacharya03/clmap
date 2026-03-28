@@ -53,7 +53,7 @@ export default function MapPage() {
     // Add place state
     const [addMode, setAddMode] = useState<'idle' | 'pin-drop' | 'form'>('idle')
     const [pinnedCoords, setPinnedCoords] = useState<{ lat: number; lng: number } | null>(null)
-    const [addForm, setAddForm] = useState({ name: '', description: '', categoryId: '', blockId: '', photo: '' as string | null })
+    const [addForm, setAddForm] = useState({ name: '', description: '', categoryId: '', blockId: '', photos: [] as string[] })
     const [blocks, setBlocks] = useState<{ id: string; name: string }[]>([])
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [submitSuccess, setSubmitSuccess] = useState(false)
@@ -174,7 +174,7 @@ export default function MapPage() {
         setAddMode('pin-drop')
         setSelectedPlace(null)
         setPinnedCoords(null)
-        setAddForm({ name: '', description: '', categoryId: '', blockId: '', photo: null })
+        setAddForm({ name: '', description: '', categoryId: '', blockId: '', photos: [] })
         setSubmitSuccess(false)
         setSubmitError('')
     }
@@ -237,7 +237,7 @@ export default function MapPage() {
                     blockId: addForm.blockId || undefined,
                     latitude: pinnedCoords?.lat,
                     longitude: pinnedCoords?.lng,
-                    photo: addForm.photo
+                    photos: addForm.photos
                 })
             })
             const data = await res.json()
@@ -575,7 +575,7 @@ export default function MapPage() {
                                             </span>
                                         )}
                                     </div>
-                                    {currentUser && reviewingPlaceId !== selectedPlace.id && !selectedPlace.reviews?.some(r => r.user.id === currentUser.id) && (
+                                    {currentUser && reviewingPlaceId !== selectedPlace.id && (
                                         <button onClick={() => setReviewingPlaceId(selectedPlace.id)} className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors">Write a Review</button>
                                     )}
                                 </div>
@@ -701,13 +701,36 @@ export default function MapPage() {
                                             />
                                         </div>
 
-                                        {/* Photo Upload */}
+                                        {/* Photos Upload */}
                                         <div>
-                                            <label className="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-1.5">Photo (Optional)</label>
-                                            <ImageUpload 
-                                                onImageSelect={(_, b64) => setAddForm(p => ({ ...p, photo: b64 }))}
-                                                className="w-full rounded-xl overflow-hidden border border-white/12"
-                                            />
+                                            <label className="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-1.5">Photos (Optional)</label>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {addForm.photos.map((photo, index) => (
+                                                    <ImageUpload 
+                                                        key={`photo-${index}`}
+                                                        currentImage={photo}
+                                                        onImageSelect={(_, b64) => {
+                                                            if (!b64) {
+                                                                setAddForm(p => ({ ...p, photos: p.photos.filter((_, i) => i !== index) }))
+                                                            } else {
+                                                                const newPhotos = [...addForm.photos]
+                                                                newPhotos[index] = b64
+                                                                setAddForm(p => ({ ...p, photos: newPhotos }))
+                                                            }
+                                                        }}
+                                                        className="w-full rounded-xl overflow-hidden border border-white/12"
+                                                    />
+                                                ))}
+                                                <ImageUpload 
+                                                    key={`new-photo-${addForm.photos.length}`}
+                                                    onImageSelect={(_, b64) => {
+                                                        if (b64) {
+                                                            setAddForm(p => ({ ...p, photos: [...p.photos, b64] }))
+                                                        }
+                                                    }}
+                                                    className="w-full rounded-xl overflow-hidden border border-white/12 border-dashed"
+                                                />
+                                            </div>
                                         </div>
 
                                         {/* Category */}

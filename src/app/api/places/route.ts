@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json()
-        const { name, description, categoryId, latitude, longitude, blockId, floorId, roomId, photo } = body
+        const { name, description, categoryId, latitude, longitude, blockId, floorId, roomId, photos } = body
 
         // Validate input
         const errors = validatePlace({ name, description, categoryId, latitude, longitude, blockId, floorId, roomId })
@@ -113,11 +113,15 @@ export async function POST(request: NextRequest) {
                 [placeId]
             )
 
-            if (photo) {
-                await pool.query(
-                    `INSERT INTO place_photos (id, "photoUrl", "placeId") VALUES (gen_random_uuid(), $1, $2)`,
-                    [photo, placeId]
-                )
+            if (Array.isArray(photos) && photos.length > 0) {
+                for (const photoStr of photos) {
+                    if (photoStr) {
+                        await pool.query(
+                            `INSERT INTO place_photos (id, "photoUrl", "placeId") VALUES (gen_random_uuid(), $1, $2)`,
+                            [photoStr, placeId]
+                        )
+                    }
+                }
             }
 
             await pool.query('COMMIT')

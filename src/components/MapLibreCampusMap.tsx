@@ -95,7 +95,7 @@ function ensurePinImage(
     emoji: string,
     selected = false,
 ) {
-    if (REGISTERED_IMAGES.has(imageId) && m.hasImage(imageId)) return
+    if (m.hasImage(imageId)) return
 
     // Pin canvas: viewBox (0,0,40,52) at 2× pixel ratio
     const W = 40, H = 52, PR = 2
