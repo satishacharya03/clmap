@@ -334,23 +334,22 @@ export default function MapPage() {
             </div>
 
             {/* ─── TOP SEARCH BAR ─── */}
-            <div className="absolute top-4 left-4 right-4 md:right-auto z-30" style={{ maxWidth: 420 }}>
+            <div className="absolute top-4 left-4 right-4 md:right-auto z-30 md:w-[320px]">
                 {/* Search box */}
                 <div className="relative">
-                    <div className="flex items-center bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100"
-                        style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.24), 0 2px 8px rgba(0,0,0,0.12)' }}>
+                    <div className="flex items-center bg-white/90 backdrop-blur-md rounded-full shadow-lg overflow-hidden border border-white/50 transition-all focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500/30">
                         <div className="pl-4 text-gray-400">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                         </div>
                         <input
                             type="text"
-                            placeholder="Search places on campus..."
+                            placeholder="Search places..."
                             value={searchInput}
                             onChange={e => setSearchInput(e.target.value)}
                             onFocus={() => searchResults.length > 0 && setShowSearchResults(true)}
-                            className="flex-1 px-3 py-3.5 outline-none text-gray-800 text-sm font-medium placeholder-gray-400 bg-transparent"
+                            className="flex-1 px-3 py-2.5 outline-none text-gray-800 text-sm font-medium placeholder-gray-500 bg-transparent"
                         />
                         {searchInput && (
                             <button onClick={() => { setSearchInput(''); setSearchResults([]); setShowSearchResults(false); setSearchQuery('') }}

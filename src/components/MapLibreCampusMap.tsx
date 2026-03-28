@@ -7,7 +7,6 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // Chandigarh University Campus Center
 const CU_CENTER: [number, number] = [76.5766, 30.7699]
 
-// CU Campus Boundary
 const CU_CAMPUS_BOUNDARY: [number, number][] = [
     [76.5680, 30.7750],
     [76.5850, 30.7750],
@@ -24,10 +23,8 @@ const OUTER_BOUNDS: [number, number][] = [
     [76.40, 30.90],
 ]
 
-// 7 floors × 4 m per floor = 28 m minimum enforced height
 const FORCED_BUILDING_HEIGHT = 28
 
-// Category color palette - vibrant, distinct colors
 const CATEGORY_COLORS = [
     '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
     '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6',
@@ -75,6 +72,87 @@ interface Props {
     onPlaceClick?: (place: Place) => void
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Draw a pin into the map's image registry using Canvas.
+//
+// WHY CANVAS INSTEAD OF HTML MARKERS?
+// HTML markers are positioned as CSS overlays on top of the WebGL canvas.
+// MapLibre projects their lat/lng → screen pixel using a 2D Mercator formula,
+// which does NOT account for the 3D perspective offset introduced by the
+// pitch angle. With pitch=55° and 28 m tall buildings, a building's visual
+// face can be ~30-50 screen pixels higher than its ground coordinate, so
+// HTML markers appear to "drift" relative to buildings when you drag.
+//
+// Symbol layers (type:'symbol') are rendered INSIDE the WebGL pipeline, so
+// they share the exact same 3D view matrix as the building extrusions.
+// They will NEVER drift, regardless of pitch, zoom, bearing, or drag.
+// ─────────────────────────────────────────────────────────────────────────────
+const REGISTERED_IMAGES = new Set<string>()
+function ensurePinImage(
+    m: maplibregl.Map,
+    imageId: string,
+    color: string,
+    emoji: string,
+    selected = false,
+) {
+    if (REGISTERED_IMAGES.has(imageId) && m.hasImage(imageId)) return
+
+    // Pin canvas: viewBox (0,0,40,52) at 2× pixel ratio
+    const W = 40, H = 52, PR = 2
+    const canvas = document.createElement('canvas')
+    canvas.width = W * PR
+    canvas.height = H * PR
+    const ctx = canvas.getContext('2d')!
+    ctx.scale(PR, PR)
+
+    // ── Tail (draw under the circle so circle overlaps its top edge) ──
+    ctx.beginPath()
+    ctx.moveTo(9, 29)
+    ctx.quadraticCurveTo(13, 42, 20, 52)
+    ctx.quadraticCurveTo(27, 42, 31, 29)
+    ctx.closePath()
+    ctx.fillStyle = color
+    ctx.fill()
+
+    // ── Circle body ──
+    ctx.beginPath()
+    ctx.arc(20, 18, 17, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+    ctx.strokeStyle = 'white'
+    ctx.lineWidth = selected ? 3.5 : 2.5
+    ctx.stroke()
+
+    // ── Inner gloss ──
+    ctx.beginPath()
+    ctx.arc(20, 18, 11, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'
+    ctx.fill()
+
+    // ── Extra ring for selected ──
+    if (selected) {
+        ctx.beginPath()
+        ctx.arc(20, 18, 17, 0, Math.PI * 2)
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)'
+        ctx.lineWidth = 2.5
+        ctx.stroke()
+    }
+
+    // ── Emoji icon ──
+    ctx.font = `${15}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(emoji, 20, selected ? 17 : 18)
+
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    m.addImage(
+        imageId,
+        { width: canvas.width, height: canvas.height, data: new Uint8Array(imgData.data.buffer) },
+        { pixelRatio: PR },
+    )
+    REGISTERED_IMAGES.add(imageId)
+}
+
 export default function MapLibreCampusMap({
     places = [],
     categories = [],
@@ -90,10 +168,17 @@ export default function MapLibreCampusMap({
 }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null)
     const map = useRef<maplibregl.Map | null>(null)
-    const markersRef = useRef<{ [id: string]: maplibregl.Marker }>({})
+
+    // Refs for values used inside MapLibre event handlers
+    // (avoids stale closures without re-adding listeners constantly)
+    const placesRef = useRef<Place[]>(places)
+    const onPlaceClickRef = useRef<((p: Place) => void) | undefined>(onPlaceClick)
+    placesRef.current = places
+    onPlaceClickRef.current = onPlaceClick
+
     const pinnedMarkerRef = useRef<maplibregl.Marker | null>(null)
-    const walkerMarkerRef = useRef<maplibregl.Marker | null>(null)
-    const walkerAnimRef = useRef<number | null>(null)
+    const lineAnimRef = useRef<number | null>(null)
+    const geolocateControlRef = useRef<maplibregl.GeolocateControl | null>(null)
     const [isFirstPerson, setIsFirstPerson] = useState(false)
     const keysPressed = useRef<Set<string>>(new Set())
     const animationRef = useRef<number | null>(null)
@@ -101,10 +186,9 @@ export default function MapLibreCampusMap({
     const [isSatellite, setIsSatellite] = useState(false)
     const layersAdded = useRef(false)
     const userLocation = useRef<{ lat: number; lng: number } | null>(null)
+    const [navStatus, setNavStatus] = useState<'idle' | 'locating' | 'routing' | 'walking' | 'error'>('idle')
 
-    // Map from category id to stable color
     const categoryColorMap = useRef<Map<string, string>>(new Map())
-
     const getCategoryColor = useCallback((catId: string) => {
         if (!categoryColorMap.current.has(catId)) {
             const idx = categoryColorMap.current.size % CATEGORY_COLORS.length
@@ -113,7 +197,7 @@ export default function MapLibreCampusMap({
         return categoryColorMap.current.get(catId)!
     }, [])
 
-    // ── Setup custom layers (campus mask, roads, 3D buildings) ──────────────
+    // ── Setup map layers ────────────────────────────────────────────────────
     const setupCustomLayers = useCallback((m: maplibregl.Map) => {
         if (layersAdded.current) return
         layersAdded.current = true
@@ -122,33 +206,25 @@ export default function MapLibreCampusMap({
         const sources = style.sources || {}
         const layers = style.layers || []
 
-        // For satellite mode we add an openmaptiles vector source ourselves for buildings
         let vectorSource = 'openmaptiles'
         for (const name of Object.keys(sources)) {
             if (name.includes('openmaptiles') || name.includes('maptiler') || name === 'composite') {
                 vectorSource = name; break
             }
         }
-
-        // If the vector source doesn't exist yet (satellite mode), add it
         if (!sources[vectorSource]) {
             try {
-                m.addSource('openmaptiles', {
-                    type: 'vector',
-                    url: 'https://tiles.openfreemap.org/planet'
-                })
+                m.addSource('openmaptiles', { type: 'vector', url: 'https://tiles.openfreemap.org/planet' })
                 vectorSource = 'openmaptiles'
             } catch (e) { }
         }
 
-        // Remove flat building layers (only applies on vector styles)
         for (const layer of layers) {
             if (layer.id.includes('building') && (layer.type === 'fill')) {
                 try { m.removeLayer(layer.id) } catch (e) { }
             }
         }
 
-        // Campus mask (only on non-satellite)
         if (!m.getSource('campus-mask')) {
             m.addSource('campus-mask', {
                 type: 'geojson',
@@ -156,13 +232,8 @@ export default function MapLibreCampusMap({
             })
         }
         if (!m.getLayer('campus-mask-layer')) {
-            m.addLayer({
-                id: 'campus-mask-layer', type: 'fill', source: 'campus-mask',
-                paint: { 'fill-color': '#0f172a', 'fill-opacity': isSatellite ? 0 : 0.88 }
-            })
+            m.addLayer({ id: 'campus-mask-layer', type: 'fill', source: 'campus-mask', paint: { 'fill-color': '#0f172a', 'fill-opacity': isSatellite ? 0 : 0.88 } })
         }
-
-        // Campus boundary
         if (!m.getSource('campus-boundary')) {
             m.addSource('campus-boundary', {
                 type: 'geojson',
@@ -173,8 +244,6 @@ export default function MapLibreCampusMap({
             m.addLayer({ id: 'campus-boundary-glow', type: 'line', source: 'campus-boundary', paint: { 'line-color': '#6366f1', 'line-width': 8, 'line-opacity': 0.4, 'line-blur': 4 } })
             m.addLayer({ id: 'campus-boundary-line', type: 'line', source: 'campus-boundary', paint: { 'line-color': '#818cf8', 'line-width': 2.5, 'line-opacity': 0.95 } })
         }
-
-        // Roads (only on non-satellite, satellite already shows roads)
         if (!isSatellite) {
             try {
                 if (!m.getLayer('campus-roads-border')) {
@@ -183,33 +252,16 @@ export default function MapLibreCampusMap({
                     m.addLayer({ id: 'campus-paths', source: vectorSource, 'source-layer': 'transportation', type: 'line', minzoom: 14, filter: ['any', ['==', ['get', 'class'], 'path'], ['==', ['get', 'class'], 'footway'], ['==', ['get', 'class'], 'pedestrian']], paint: { 'line-color': '#cbd5e1', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 18, 3], 'line-dasharray': [2, 2], 'line-opacity': 0.8 } })
                 }
             } catch (e) { }
-            try {
-                if (!m.getLayer('campus-parks')) m.addLayer({ id: 'campus-parks', source: vectorSource, 'source-layer': 'landuse', type: 'fill', filter: ['in', ['get', 'class'], ['literal', ['park', 'grass', 'garden', 'meadow', 'recreation_ground']]], paint: { 'fill-color': '#4ade80', 'fill-opacity': 0.25 } })
-            } catch (e) { }
-            try {
-                if (!m.getLayer('campus-water')) m.addLayer({ id: 'campus-water', source: vectorSource, 'source-layer': 'water', type: 'fill', paint: { 'fill-color': '#38bdf8', 'fill-opacity': 0.4 } })
-            } catch (e) { }
+            try { if (!m.getLayer('campus-parks')) m.addLayer({ id: 'campus-parks', source: vectorSource, 'source-layer': 'landuse', type: 'fill', filter: ['in', ['get', 'class'], ['literal', ['park', 'grass', 'garden', 'meadow', 'recreation_ground']]], paint: { 'fill-color': '#4ade80', 'fill-opacity': 0.25 } }) } catch (e) { }
+            try { if (!m.getLayer('campus-water')) m.addLayer({ id: 'campus-water', source: vectorSource, 'source-layer': 'water', type: 'fill', paint: { 'fill-color': '#38bdf8', 'fill-opacity': 0.4 } }) } catch (e) { }
         }
-
-        // 3D Buildings
         try {
             if (!m.getLayer('3d-buildings')) {
                 m.addLayer({
                     id: '3d-buildings', source: vectorSource, 'source-layer': 'building',
                     type: 'fill-extrusion', minzoom: 14,
                     paint: {
-                        'fill-extrusion-color': ['case',
-                            ['has', 'colour'], ['get', 'colour'],
-                            ['==', ['get', 'building'], 'university'], '#3b82f6',
-                            ['==', ['get', 'building'], 'college'], '#8b5cf6',
-                            ['==', ['get', 'building'], 'school'], '#22c55e',
-                            ['==', ['get', 'building'], 'hospital'], '#ef4444',
-                            ['==', ['get', 'building'], 'hotel'], '#f59e0b',
-                            ['==', ['get', 'building'], 'commercial'], '#06b6d4',
-                            ['==', ['get', 'building'], 'retail'], '#f97316',
-                            ['==', ['get', 'building'], 'residential'], '#64748b',
-                            '#6366f1'
-                        ],
+                        'fill-extrusion-color': ['case', ['has', 'colour'], ['get', 'colour'], ['==', ['get', 'building'], 'university'], '#3b82f6', ['==', ['get', 'building'], 'college'], '#8b5cf6', ['==', ['get', 'building'], 'school'], '#22c55e', ['==', ['get', 'building'], 'hospital'], '#ef4444', ['==', ['get', 'building'], 'hotel'], '#f59e0b', ['==', ['get', 'building'], 'commercial'], '#06b6d4', ['==', ['get', 'building'], 'retail'], '#f97316', ['==', ['get', 'building'], 'residential'], '#64748b', '#6366f1'],
                         'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 14, 0, 15, ['max', FORCED_BUILDING_HEIGHT, ['coalesce', ['get', 'render_height'], ['*', ['coalesce', ['get', 'building:levels'], 7], 4], ['get', 'height'], FORCED_BUILDING_HEIGHT]]],
                         'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
                         'fill-extrusion-opacity': isSatellite ? 0.75 : 0.9,
@@ -217,21 +269,62 @@ export default function MapLibreCampusMap({
                 })
             }
         } catch (e) { console.error('3D buildings error:', e) }
+        try { if (!m.getLayer('building-outlines')) m.addLayer({ id: 'building-outlines', source: vectorSource, 'source-layer': 'building', type: 'line', minzoom: 15, paint: { 'line-color': '#a5b4fc', 'line-width': 1, 'line-opacity': 0.5 } }) } catch (e) { }
 
-        // Building outlines
-        try {
-            if (!m.getLayer('building-outlines')) {
-                m.addLayer({ id: 'building-outlines', source: vectorSource, 'source-layer': 'building', type: 'line', minzoom: 15, paint: { 'line-color': '#a5b4fc', 'line-width': 1, 'line-opacity': 0.5 } })
-            }
-        } catch (e) { }
+        // ── GeoJSON source + Symbol layer for place pins ──────────────────
+        // This is the key fix: symbol layers are rendered in WebGL and share
+        // the exact 3D projection with buildings — zero drift on pitch/drag.
+        if (!m.getSource('places-source')) {
+            m.addSource('places-source', {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] },
+            })
+        }
+        if (!m.getLayer('places-layer')) {
+            m.addLayer({
+                id: 'places-layer',
+                type: 'symbol',
+                source: 'places-source',
+                layout: {
+                    'icon-image': ['get', 'iconId'],
+                    'icon-anchor': 'bottom',
+                    'icon-allow-overlap': true,
+                    'icon-ignore-placement': true,
+                    'icon-size': ['interpolate', ['linear'], ['zoom'], 14, 0.7, 17, 1.0, 20, 1.3],
+                    'icon-padding': 0,
+                },
+            })
+        }
+
+        // Click on a place pin
+        m.on('click', 'places-layer', (e) => {
+            if (!e.features?.length) return
+            const id = e.features[0].properties?.id
+            const place = placesRef.current.find(p => p.id === id)
+            if (!place) return
+            onPlaceClickRef.current?.(place)
+            m.flyTo({
+                center: [place.longitude!, place.latitude!],
+                zoom: Math.max(m.getZoom(), 17),
+                duration: 800,
+                essential: true,
+            })
+        })
+
+        // Pointer cursor on hover
+        m.on('mouseenter', 'places-layer', () => {
+            m.getCanvas().style.cursor = 'pointer'
+        })
+        m.on('mouseleave', 'places-layer', () => {
+            if (!pinDropMode) m.getCanvas().style.cursor = ''
+        })
 
         setMapLoaded(true)
-    }, [isSatellite])
+    }, [isSatellite]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Initialize map
     useEffect(() => {
         if (!mapContainer.current || map.current) return
-
         map.current = new maplibregl.Map({
             container: mapContainer.current,
             style: 'https://tiles.openfreemap.org/styles/liberty',
@@ -243,248 +336,142 @@ export default function MapLibreCampusMap({
             bearing: -17.6,
             maxPitch: 85,
             dragRotate: true,
-            maxBounds: [[76.5620, 30.7580], [76.5920, 30.7800]]
         })
-
         map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), 'bottom-right')
-
-        const gc = new maplibregl.GeolocateControl({
-            positionOptions: { enableHighAccuracy: true },
-            trackUserLocation: true,
-            showAccuracyCircle: false
+        
+        const gc = new maplibregl.GeolocateControl({ 
+            positionOptions: { enableHighAccuracy: true }, 
+            trackUserLocation: true, 
+            showAccuracyCircle: true,
+            showUserLocation: true 
         })
+        geolocateControlRef.current = gc
         map.current.addControl(gc, 'bottom-right')
-
+        
         gc.on('geolocate', (e: any) => {
             userLocation.current = { lat: e.coords.latitude, lng: e.coords.longitude }
             window.dispatchEvent(new CustomEvent('userLocationUpdate'))
         })
-
-        // Handle missing style images (like "sports_centre") to prevent console warnings
         map.current.on('styleimagemissing', (e) => {
-            const id = e.id;
-            // Create a transparent 1x1 pixel image
-            const width = 1;
-            const height = 1;
-            const data = new Uint8Array(width * height * 4);
-            map.current?.addImage(id, { width, height, data });
-        });
-
+            const data = new Uint8Array(4)
+            map.current?.addImage(e.id, { width: 1, height: 1, data })
+        })
         map.current.on('load', () => {
             if (!map.current) return
             setupCustomLayers(map.current)
         })
+        return () => { if (map.current) { map.current.remove(); map.current = null } }
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-        return () => {
-            if (map.current) { map.current.remove(); map.current = null }
-        }
-    }, [])
-
-    // Satellite toggle handler
+    // Satellite toggle
     const toggleSatellite = useCallback(() => {
         if (!map.current) return
         const next = !isSatellite
         setIsSatellite(next)
         layersAdded.current = false
         setMapLoaded(false)
-
+        REGISTERED_IMAGES.clear()
         if (next) {
-            // Satellite: Esri World Imagery raster + OpenFreeMap vector for buildings
             map.current.setStyle({
                 version: 8,
                 glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
-                sources: {
-                    'esri-satellite': {
-                        type: 'raster',
-                        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-                        tileSize: 256,
-                        attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics'
-                    }
-                },
+                sources: { 'esri-satellite': { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Tiles © Esri' } },
                 layers: [{ id: 'esri-satellite', type: 'raster', source: 'esri-satellite' }]
             } as maplibregl.StyleSpecification)
         } else {
             map.current.setStyle('https://tiles.openfreemap.org/styles/liberty')
         }
-
-        // Re-add custom layers once the new style is loaded
         map.current.once('styledata', () => {
-            if (map.current && map.current.isStyleLoaded()) {
-                setupCustomLayers(map.current)
-            } else {
-                map.current?.once('idle', () => {
-                    if (map.current) setupCustomLayers(map.current)
-                })
-            }
+            if (map.current?.isStyleLoaded()) setupCustomLayers(map.current)
+            else map.current?.once('idle', () => { if (map.current) setupCustomLayers(map.current) })
         })
     }, [isSatellite, setupCustomLayers])
 
-    // Handle map click for pin-drop mode
+    // Map click for pin-drop mode
     useEffect(() => {
         if (!map.current) return
         const handleClick = (e: maplibregl.MapMouseEvent) => {
-            if (pinDropMode && onMapClick) {
-                onMapClick(e.lngLat.lat, e.lngLat.lng)
-            }
+            if (pinDropMode && onMapClick) onMapClick(e.lngLat.lat, e.lngLat.lng)
         }
         map.current.on('click', handleClick)
-        return () => {
-            map.current?.off('click', handleClick)
-        }
+        return () => { map.current?.off('click', handleClick) }
     }, [pinDropMode, onMapClick])
 
-    // Update cursor for pin-drop mode
+    // Cursor for pin-drop
     useEffect(() => {
         if (!map.current) return
         map.current.getCanvas().style.cursor = pinDropMode ? 'crosshair' : ''
     }, [pinDropMode])
 
-    // Render place markers
+    // ── Update places symbol layer ─────────────────────────────────────────
+    // Runs whenever places / filter / selected changes.
+    // Draws canvas pin images into the map registry, then updates the
+    // GeoJSON FeatureCollection — no HTML DOM manipulation involved.
     useEffect(() => {
         if (!map.current || !mapLoaded) return
+        const m = map.current
+        if (!m.getSource('places-source')) return
 
-        // Determine visible places
-        const visiblePlaces = places.filter(p => {
+        const visible = places.filter(p => {
             if (!p.latitude || !p.longitude) return false
-            if (selectedCategoryIds.length > 0 && p.category) {
-                return selectedCategoryIds.includes(p.category.id)
-            }
+            if (selectedCategoryIds.length > 0 && p.category) return selectedCategoryIds.includes(p.category.id)
             return true
         })
 
-        const visibleIds = new Set(visiblePlaces.map(p => p.id))
-
-        // Remove markers not in visible set
-        for (const [id, marker] of Object.entries(markersRef.current)) {
-            if (!visibleIds.has(id)) {
-                marker.remove()
-                delete markersRef.current[id]
-            }
-        }
-
-        // Add/update markers
-        for (const place of visiblePlaces) {
-            if (markersRef.current[place.id]) continue
-
+        // Register canvas images for each unique category (normal + selected variant)
+        for (const place of visible) {
             const color = place.category ? getCategoryColor(place.category.id) : '#6366f1'
-            const icon = place.category?.icon || '📍'
-
-            // Custom marker element
-            const el = document.createElement('div')
-            el.className = 'place-marker'
-            el.style.cssText = `
-                width: 36px;
-                height: 42px;
-                cursor: pointer;
-                position: relative;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: flex-end;
-            `
-            const inner = document.createElement('div')
-            inner.style.cssText = `
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-                filter: drop-shadow(0 4px 8px rgba(0,0,0,0.35));
-                transform-origin: bottom center;
-            `
-            inner.innerHTML = `
-                <div style="
-                    width: 36px;
-                    height: 36px;
-                    background: ${color};
-                    border-radius: 50% 50% 50% 4px;
-                    transform: rotate(-45deg);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    border: 2.5px solid white;
-                    box-shadow: 0 2px 12px ${color}66;
-                    transition: all 0.2s ease;
-                ">
-                    <span style="transform: rotate(45deg); font-size: 16px; line-height: 1;">${icon}</span>
-                </div>
-                <div style="
-                    width: 4px;
-                    height: 4px;
-                    background: ${color};
-                    border-radius: 50%;
-                    margin-top: -2px;
-                    opacity: 0.6;
-                "></div>
-            `
-            el.appendChild(inner)
-
-            el.addEventListener('mouseenter', () => {
-                inner.style.transform = 'scale(1.2) translateY(-4px)'
-            })
-            el.addEventListener('mouseleave', () => {
-                inner.style.transform = 'scale(1) translateY(0)'
-            })
-            el.addEventListener('click', (e) => {
-                e.stopPropagation()
-                if (onPlaceClick) onPlaceClick(place)
-                map.current?.flyTo({
-                    center: [place.longitude!, place.latitude!],
-                    zoom: Math.max(map.current.getZoom(), 17),
-                    duration: 800,
-                    essential: true
-                })
-            })
-
-            const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
-                .setLngLat([place.longitude!, place.latitude!])
-                .addTo(map.current!)
-
-            markersRef.current[place.id] = marker
+            const emoji = place.category?.icon || '📍'
+            const catKey = place.category?.id || 'default'
+            ensurePinImage(m, `pin-${catKey}`, color, emoji, false)
+            ensurePinImage(m, `pin-${catKey}-sel`, color, emoji, true)
         }
-    }, [places, selectedCategoryIds, mapLoaded, getCategoryColor, onPlaceClick])
 
-    // Fly to selected place (just camera, no route)
+        const geojson: GeoJSON.FeatureCollection = {
+            type: 'FeatureCollection',
+            features: visible.map(p => ({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [p.longitude!, p.latitude!] },
+                properties: {
+                    id: p.id,
+                    name: p.name,
+                    iconId: p.id === selectedPlace?.id
+                        ? `pin-${p.category?.id || 'default'}-sel`
+                        : `pin-${p.category?.id || 'default'}`,
+                },
+            })),
+        }
+        ;(m.getSource('places-source') as maplibregl.GeoJSONSource).setData(geojson)
+    }, [places, selectedCategoryIds, mapLoaded, selectedPlace, getCategoryColor])
+
+    // Fly to selected place
     useEffect(() => {
         if (!map.current || !flyToPlace?.latitude || !flyToPlace?.longitude) return
-        map.current.flyTo({
-            center: [flyToPlace.longitude, flyToPlace.latitude],
-            zoom: 18,
-            pitch: 60,
-            duration: 1200,
-            essential: true
-        })
+        map.current.flyTo({ center: [flyToPlace.longitude, flyToPlace.latitude], zoom: 18, pitch: 60, duration: 1200, essential: true })
     }, [flyToPlace])
 
-    // Sync pinnedCoords to a geo-anchored map marker
+    // Pin-drop temporary marker (stays as HTML — it's ephemeral, one at a time)
     useEffect(() => {
         if (!map.current || !mapLoaded) return
         if (pinnedCoords) {
+            const makeEl = () => {
+                const wrap = document.createElement('div')
+                wrap.style.cssText = 'pointer-events:none;'
+                const inner = document.createElement('div')
+                inner.style.cssText = 'transform-origin:center bottom;animation:pinBounceIn 0.4s cubic-bezier(0.34,1.56,0.64,1);'
+                inner.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 52" width="44" height="57">
+                  <path d="M9,29 Q13,42 20,52 Q27,42 31,29 Z" fill="#6366f1"/>
+                  <circle cx="20" cy="18" r="17" fill="#6366f1" stroke="white" stroke-width="3"/>
+                  <circle cx="20" cy="18" r="11" fill="rgba(255,255,255,0.25)"/>
+                  <circle cx="20" cy="18" r="17" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2.5"/>
+                  <text x="20" y="23" text-anchor="middle" font-size="14" font-family="Apple Color Emoji,Segoe UI Emoji,sans-serif">📍</text>
+                </svg>`
+                wrap.appendChild(inner)
+                return wrap
+            }
             if (!pinnedMarkerRef.current) {
-                const el = document.createElement('div')
-                el.style.cssText = `
-                    width: 36px; height: 48px;
-                    display: flex; flex-direction: column; align-items: center;
-                    pointer-events: none;
-                `
-                el.innerHTML = `
-                    <div style="
-                        width: 36px; height: 36px;
-                        background: #6366f1;
-                        border-radius: 50% 50% 50% 4px;
-                        transform: rotate(-45deg);
-                        display: flex; align-items: center; justify-content: center;
-                        border: 3px solid white;
-                        box-shadow: 0 4px 16px rgba(99,102,241,0.6);
-                        animation: pinBounce 0.5s cubic-bezier(0.34,1.56,0.64,1);
-                    ">
-                        <span style="transform:rotate(45deg); font-size:16px;">📍</span>
-                    </div>
-                    <div style="
-                        width: 6px; height: 6px; background: #6366f1;
-                        border-radius: 50%; margin-top: -2px; opacity: 0.5;
-                    "></div>
-                `
-                pinnedMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+                pinnedMarkerRef.current = new maplibregl.Marker({ element: makeEl(), anchor: 'bottom' })
                     .setLngLat([pinnedCoords.lng, pinnedCoords.lat])
                     .addTo(map.current!)
             } else {
@@ -496,81 +483,44 @@ export default function MapLibreCampusMap({
         }
     }, [pinnedCoords, mapLoaded])
 
-    // Search - filter/fly to matching place
+    // Search fly-to
     useEffect(() => {
         if (!map.current || !searchQuery) return
         const q = searchQuery.toLowerCase()
-        const match = places.find(p =>
-            p.name.toLowerCase().includes(q) ||
-            p.category?.categoryName.toLowerCase().includes(q)
-        )
-        if (match?.latitude && match?.longitude) {
-            map.current.flyTo({
-                center: [match.longitude, match.latitude],
-                zoom: 18, pitch: 60, duration: 1200
-            })
-        }
+        const match = places.find(p => p.name.toLowerCase().includes(q) || p.category?.categoryName.toLowerCase().includes(q))
+        if (match?.latitude && match?.longitude) map.current.flyTo({ center: [match.longitude, match.latitude], zoom: 18, pitch: 60, duration: 1200 })
     }, [searchQuery, places])
 
     // Street view keyboard movement
     const moveCamera = useCallback(() => {
         if (!map.current || !isFirstPerson) return
-        const speed = 0.000035       // ~natural walking pace
-        const rotateSpeed = 1.0      // slower, controlled turn
+        const speed = 0.000035, rotateSpeed = 1.0
         let moved = false
         const center = map.current.getCenter()
         const bearing = map.current.getBearing()
         const bearingRad = (bearing * Math.PI) / 180
-
-        if (keysPressed.current.has('w') || keysPressed.current.has('arrowup')) {
-            center.lng += Math.sin(bearingRad) * speed; center.lat += Math.cos(bearingRad) * speed; moved = true
-        }
-        if (keysPressed.current.has('s') || keysPressed.current.has('arrowdown')) {
-            center.lng -= Math.sin(bearingRad) * speed; center.lat -= Math.cos(bearingRad) * speed; moved = true
-        }
-        if (keysPressed.current.has('a')) {
-            center.lng -= Math.cos(bearingRad) * speed; center.lat += Math.sin(bearingRad) * speed; moved = true
-        }
-        if (keysPressed.current.has('d')) {
-            center.lng += Math.cos(bearingRad) * speed; center.lat -= Math.sin(bearingRad) * speed; moved = true
-        }
-        if (keysPressed.current.has('arrowleft') || keysPressed.current.has('q')) {
-            map.current.setBearing(bearing - rotateSpeed); moved = true
-        }
-        if (keysPressed.current.has('arrowright') || keysPressed.current.has('e')) {
-            map.current.setBearing(bearing + rotateSpeed); moved = true
-        }
+        if (keysPressed.current.has('w') || keysPressed.current.has('arrowup')) { center.lng += Math.sin(bearingRad) * speed; center.lat += Math.cos(bearingRad) * speed; moved = true }
+        if (keysPressed.current.has('s') || keysPressed.current.has('arrowdown')) { center.lng -= Math.sin(bearingRad) * speed; center.lat -= Math.cos(bearingRad) * speed; moved = true }
+        if (keysPressed.current.has('a')) { center.lng -= Math.cos(bearingRad) * speed; center.lat += Math.sin(bearingRad) * speed; moved = true }
+        if (keysPressed.current.has('d')) { center.lng += Math.cos(bearingRad) * speed; center.lat -= Math.sin(bearingRad) * speed; moved = true }
+        if (keysPressed.current.has('arrowleft') || keysPressed.current.has('q')) { map.current.setBearing(bearing - rotateSpeed); moved = true }
+        if (keysPressed.current.has('arrowright') || keysPressed.current.has('e')) { map.current.setBearing(bearing + rotateSpeed); moved = true }
         if (moved) map.current.setCenter(center)
         animationRef.current = requestAnimationFrame(moveCamera)
     }, [isFirstPerson])
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Don't intercept keys when user is typing in an input, textarea, or select
             const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
-            const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select'
-            if (isTyping) return
-
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return
             const key = e.key.toLowerCase()
-            if (key === ' ' && !pinDropMode) {
-                e.preventDefault()
-                setIsFirstPerson(prev => !prev)
-                return
-            }
-            if (['w', 'a', 's', 'd', 'q', 'e', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
-                e.preventDefault()
-                keysPressed.current.add(key)
-            }
+            if (key === ' ' && !pinDropMode) { e.preventDefault(); setIsFirstPerson(prev => !prev); return }
+            if (['w', 'a', 's', 'd', 'q', 'e', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) { e.preventDefault(); keysPressed.current.add(key) }
         }
-        const handleKeyUp = (e: KeyboardEvent) => {
-            keysPressed.current.delete(e.key.toLowerCase())
-        }
+        const handleKeyUp = (e: KeyboardEvent) => { keysPressed.current.delete(e.key.toLowerCase()) }
         window.addEventListener('keydown', handleKeyDown)
         window.addEventListener('keyup', handleKeyUp)
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown)
-            window.removeEventListener('keyup', handleKeyUp)
-        }
+        return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp) }
     }, [pinDropMode])
 
     useEffect(() => {
@@ -581,193 +531,142 @@ export default function MapLibreCampusMap({
             map.current?.easeTo({ pitch: 55, zoom: 16, duration: 1000 })
             if (animationRef.current) cancelAnimationFrame(animationRef.current)
         }
-        return () => {
-            if (animationRef.current) cancelAnimationFrame(animationRef.current)
-        }
+        return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current) }
     }, [isFirstPerson, moveCamera])
 
     const handleRemoveRoute = useCallback(() => {
         if (!map.current) return
         if (map.current.getSource('route')) {
-            (map.current.getSource('route') as maplibregl.GeoJSONSource).setData({
-                type: 'Feature',
-                properties: {},
-                geometry: { type: 'LineString', coordinates: [] }
-            })
+            (map.current.getSource('route') as maplibregl.GeoJSONSource).setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } })
         }
     }, [])
 
     const stopWalker = useCallback(() => {
-        if (walkerAnimRef.current) {
-            cancelAnimationFrame(walkerAnimRef.current)
-            walkerAnimRef.current = null
+        if (lineAnimRef.current) { cancelAnimationFrame(lineAnimRef.current); lineAnimRef.current = null }
+        // Turn off navigation tracking if active
+        if (geolocateControlRef.current && geolocateControlRef.current._watchState !== 'OFF') {
+            geolocateControlRef.current.trigger() // Togging trigger when ON turns it OFF
         }
-        walkerMarkerRef.current?.remove()
-        walkerMarkerRef.current = null
+        setNavStatus('idle')
     }, [])
 
     const drawRoute = useCallback(async (endLat: number, endLng: number, animate = false) => {
         if (!map.current || !userLocation.current) return
+        if (animate) setNavStatus('routing')
         try {
             const start = userLocation.current
             const res = await fetch(`https://router.project-osrm.org/route/v1/foot/${start.lng},${start.lat};${endLng},${endLat}?geometries=geojson`)
-            if (!res.ok) return
+            if (!res.ok) { if (animate) setNavStatus('error'); return }
             const data = await res.json()
-            if (data.routes && data.routes.length > 0) {
+            if (data.routes?.length > 0) {
                 const route = data.routes[0].geometry
-                const coords: [number, number][] = route.coordinates
-
+                
+                // OSRM snaps to the nearest mapped road, which can be ~100m away on a campus. 
+                // We manually prepend the user's EXACT raw GPS coordinate, and append the EXACT 
+                // building pin coordinate to the line so there is zero gap or misplacement shown.
+                const coords: [number, number][] = [
+                    [start.lng, start.lat],
+                    ...route.coordinates,
+                    [endLng, endLat]
+                ]
+                
                 if (map.current.getSource('route')) {
-                    (map.current.getSource('route') as maplibregl.GeoJSONSource).setData({
-                        type: 'Feature', properties: {}, geometry: route
-                    })
+                    (map.current.getSource('route') as maplibregl.GeoJSONSource).setData({ type: 'Feature', properties: {}, geometry: route })
                 } else {
-                    map.current.addSource('route', {
-                        type: 'geojson',
-                        data: { type: 'Feature', properties: {}, geometry: route }
-                    })
-                    map.current.addLayer({
-                        id: 'route-line-outline', type: 'line', source: 'route',
-                        layout: { 'line-join': 'round', 'line-cap': 'round' },
-                        paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 }
-                    })
-                    map.current.addLayer({
-                        id: 'route-line', type: 'line', source: 'route',
-                        layout: { 'line-join': 'round', 'line-cap': 'round' },
-                        paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 1 }
-                    })
+                    map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route } })
+                    map.current.addLayer({ id: 'route-line-outline', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 } })
+                    map.current.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 1 } })
                 }
-
-                if (animate && coords.length > 1) {
-                    stopWalker()
-
-                    // Create walker marker
-                    const walkerEl = document.createElement('div')
-                    walkerEl.style.cssText = `
-                        width: 28px; height: 28px;
-                        background: #22c55e;
-                        border: 3px solid white;
-                        border-radius: 50%;
-                        box-shadow: 0 0 0 4px rgba(34,197,94,0.35), 0 4px 12px rgba(0,0,0,0.4);
-                        display: flex; align-items: center; justify-content: center;
-                        font-size: 14px;
-                    `
-                    walkerEl.textContent = '🚶'
-
-                    walkerMarkerRef.current = new maplibregl.Marker({ element: walkerEl, anchor: 'center' })
-                        .setLngLat(coords[0])
-                        .addTo(map.current!)
-
-                    // Fly camera to start of route, following the walker
-                    map.current.flyTo({
-                        center: coords[0],
-                        zoom: 18, pitch: 60, duration: 1500, essential: true
-                    })
-
-                    // Animate walker along route
+                    // 1. Animate line drawing
                     const totalPoints = coords.length
-                    const duration = Math.max(totalPoints * 80, 4000) // ms
-                    const startTime = performance.now()
-
-                    const step = (now: number) => {
-                        if (!map.current || !walkerMarkerRef.current) return
-                        const elapsed = now - startTime
-                        const t = Math.min(elapsed / duration, 1)
-                        const idx = Math.floor(t * (totalPoints - 1))
-                        const nextIdx = Math.min(idx + 1, totalPoints - 1)
-                        const localT = t * (totalPoints - 1) - idx
-
-                        // Interpolate between two coords
-                        const lng = coords[idx][0] + (coords[nextIdx][0] - coords[idx][0]) * localT
-                        const lat = coords[idx][1] + (coords[nextIdx][1] - coords[idx][1]) * localT
-
-                        walkerMarkerRef.current.setLngLat([lng, lat])
-                        // Follow walker with camera smoothly
-                        map.current.easeTo({ center: [lng, lat], duration: 100, easing: (x) => x })
-
-                        if (t < 1) {
-                            walkerAnimRef.current = requestAnimationFrame(step)
+                    const routeSource = map.current.getSource('route') as maplibregl.GeoJSONSource
+                    
+                    const drawDuration = 1200
+                    const startDrawTime = performance.now()
+                    
+                    map.current.flyTo({ center: coords[0], zoom: 17, pitch: 50, duration: 1500, essential: true })
+                    
+                    const animateLine = (now: number) => {
+                        const progress = Math.max(0, Math.min((now - startDrawTime) / drawDuration, 1))
+                        const currentFloatIndex = progress * (totalPoints - 1)
+                        const currentIntIndex = Math.floor(currentFloatIndex)
+                        
+                        // Slice points up to current index + interpolate the last tip
+                        const currentCoords = coords.slice(0, currentIntIndex + 1)
+                        if (currentIntIndex < totalPoints - 1) {
+                            const ratio = currentFloatIndex - currentIntIndex
+                            const p1 = coords[currentIntIndex]
+                            const p2 = coords[currentIntIndex + 1]
+                            currentCoords.push([
+                                p1[0] + (p2[0] - p1[0]) * ratio,
+                                p1[1] + (p2[1] - p1[1]) * ratio
+                            ])
+                        }
+                        
+                        routeSource.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: currentCoords } })
+                        
+                        if (progress < 1) {
+                            lineAnimRef.current = requestAnimationFrame(animateLine)
                         } else {
-                            // Arrived - stop and clean up walker after a moment
-                            setTimeout(() => stopWalker(), 2000)
+                            // 2. Start Real GPS Tracking using MapLibre's built-in 'perfect' blue dot
+                            setNavStatus('walking')
+                            
+                            // Trigger MapLibre's native GeolocateControl which perfectly 
+                            // handles the blue dot, accuracy circle, and camera tracking!
+                            if (geolocateControlRef.current && geolocateControlRef.current._watchState === 'OFF') {
+                                geolocateControlRef.current.trigger()
+                            }
                         }
                     }
-                    walkerAnimRef.current = requestAnimationFrame(step)
-                }
+                    lineAnimRef.current = requestAnimationFrame(animateLine)
             }
-        } catch (err) {
-            console.error('Routing error', err)
-        }
+        } catch (err) { console.error('Routing error', err); if (animate) setNavStatus('error') }
     }, [stopWalker])
 
-    // Draw route (no animation) when a place is selected
     useEffect(() => {
-        if (!selectedPlace?.latitude || !selectedPlace?.longitude) {
-            handleRemoveRoute()
-            stopWalker()
-            return
-        }
+        if (!selectedPlace?.latitude || !selectedPlace?.longitude) { handleRemoveRoute(); stopWalker(); return }
         const draw = () => drawRoute(selectedPlace.latitude!, selectedPlace.longitude!, false)
-        if (userLocation.current) {
-            draw()
-        } else {
-            navigator.geolocation.getCurrentPosition((pos) => {
-                userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-                draw()
-            }, () => {}, { enableHighAccuracy: true })
-        }
-        const onLocUpdate = () => draw()
-        window.addEventListener('userLocationUpdate', onLocUpdate)
-        return () => window.removeEventListener('userLocationUpdate', onLocUpdate)
+        if (userLocation.current) draw()
+        else navigator.geolocation.getCurrentPosition(pos => { userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }; draw() }, () => { }, { enableHighAccuracy: true, timeout: 5000 })
+        const onLoc = () => draw()
+        window.addEventListener('userLocationUpdate', onLoc)
+        return () => window.removeEventListener('userLocationUpdate', onLoc)
     }, [selectedPlace, drawRoute, handleRemoveRoute, stopWalker])
 
-    // Navigate with walking animation when navigateToPlace changes
     useEffect(() => {
         if (!navigateToPlace?.latitude || !navigateToPlace?.longitude) return
-        const navigate = () => drawRoute(navigateToPlace.latitude!, navigateToPlace.longitude!, true)
-        if (userLocation.current) {
-            navigate()
-        } else {
-            navigator.geolocation.getCurrentPosition((pos) => {
-                userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-                navigate()
-            }, () => { console.log('Location unavailable') }, { enableHighAccuracy: true })
-        }
+        setNavStatus('locating')
+        const go = () => drawRoute(navigateToPlace.latitude!, navigateToPlace.longitude!, true)
+        if (userLocation.current) go()
+        else navigator.geolocation.getCurrentPosition(pos => { userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }; go() }, () => setNavStatus('error'), { enableHighAccuracy: true, timeout: 8000 })
     }, [navigateToPlace, drawRoute])
 
     return (
         <div className="w-full h-full relative">
             <div ref={mapContainer} className="w-full h-full" />
 
-            {/* Map Controls - top right cluster */}
+            {/* Navigation status overlay */}
+            {navStatus !== 'idle' && (
+                <div className="absolute bottom-8 right-16 z-50 pointer-events-none origin-bottom-right scale-90 md:scale-100">
+                    {navStatus === 'locating' && <div className="bg-gray-900/95 text-white px-6 py-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3"><div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /><span className="text-sm font-semibold">Getting your location…</span></div>}
+                    {navStatus === 'routing' && <div className="bg-gray-900/95 text-white px-6 py-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3"><div className="w-5 h-5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" /><span className="text-sm font-semibold">Calculating route…</span></div>}
+                    {navStatus === 'walking' && <div className="bg-gray-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl border border-green-500/30 flex items-center gap-3"><div className="w-3 h-3 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.8)]" /><span className="text-sm font-semibold text-green-400">Navigating live…</span></div>}
+                    {navStatus === 'error' && <div className="bg-red-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl border border-red-500/30 flex items-center gap-3"><span>⚠️</span><span className="text-sm font-semibold">Could not get location. Please enable GPS.</span></div>}
+                </div>
+            )}
+
+            {/* Map Controls */}
             {!pinDropMode && (
                 <div className="absolute top-4 right-4 z-10 flex gap-2">
-                    {/* Satellite Toggle */}
-                    <button
-                        onClick={toggleSatellite}
-                        className={`px-4 py-2.5 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center gap-2 backdrop-blur-md border ${isSatellite
-                            ? 'bg-indigo-500/90 border-indigo-400 text-white'
-                            : 'bg-white/90 border-white/60 text-gray-700 hover:bg-white'
-                            }`}
-                        title="Toggle satellite view"
-                    >
+                    <button onClick={toggleSatellite} className={`px-4 py-2.5 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center gap-2 backdrop-blur-md border ${isSatellite ? 'bg-indigo-500/90 border-indigo-400 text-white' : 'bg-white/90 border-white/60 text-gray-700 hover:bg-white'}`} title="Toggle satellite view">
                         {isSatellite ? <><span>🗺️</span> Map</> : <><span>🛰️</span> Satellite</>}
                     </button>
-
-                    {/* Street View Toggle */}
-                    <button
-                        onClick={() => setIsFirstPerson(!isFirstPerson)}
-                        className={`px-4 py-2.5 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center gap-2 backdrop-blur-md border ${isFirstPerson
-                            ? 'bg-indigo-500/90 border-indigo-400 text-white'
-                            : 'bg-white/90 border-white/60 text-gray-700 hover:bg-white'
-                            }`}
-                    >
+                    <button onClick={() => setIsFirstPerson(!isFirstPerson)} className={`px-4 py-2.5 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center gap-2 backdrop-blur-md border ${isFirstPerson ? 'bg-indigo-500/90 border-indigo-400 text-white' : 'bg-white/90 border-white/60 text-gray-700 hover:bg-white'}`}>
                         {isFirstPerson ? <><span>🚶</span> Street View</> : <><span>🦅</span> Aerial</>}
                     </button>
                 </div>
             )}
 
-            {/* Street View Controls */}
             {isFirstPerson && (
                 <div className="absolute bottom-20 left-4 z-10 bg-gray-900/90 text-white rounded-2xl p-4 backdrop-blur-sm shadow-2xl border border-white/10">
                     <p className="font-bold mb-3 text-sm text-indigo-300">🚶 Street View Controls</p>
@@ -780,6 +679,19 @@ export default function MapLibreCampusMap({
                     </div>
                 </div>
             )}
+
+            {/* Map Styles including custom ping keyframe */}
+            <style>{`
+                @keyframes pinBounceIn {
+                    0%   { transform: translateY(-24px) scale(0.7); opacity: 0; }
+                    60%  { transform: translateY(4px) scale(1.08); opacity: 1; }
+                    80%  { transform: translateY(-2px) scale(0.97); }
+                    100% { transform: translateY(0) scale(1); }
+                }
+                @keyframes ping {
+                    75%, 100% { transform: scale(2.5); opacity: 0; }
+                }
+            `}</style>
         </div>
     )
 }
