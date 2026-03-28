@@ -50,6 +50,7 @@ export interface Place {
         name: string
     }
     photos?: { photoUrl: string }[]
+    reviews?: { id: string; rating: number; comment: string; createdAt: string; user: { name: string, id: string } }[]
     approvalStatus: string
 }
 
@@ -67,6 +68,8 @@ interface Props {
     searchQuery?: string
     pinDropMode?: boolean
     flyToPlace?: Place | null
+    navigateToPlace?: Place | null
+    pinnedCoords?: { lat: number; lng: number } | null
     selectedPlace?: Place | null
     onMapClick?: (lat: number, lng: number) => void
     onPlaceClick?: (place: Place) => void
@@ -79,6 +82,8 @@ export default function MapLibreCampusMap({
     searchQuery = '',
     pinDropMode = false,
     flyToPlace,
+    navigateToPlace,
+    pinnedCoords,
     selectedPlace,
     onMapClick,
     onPlaceClick,
@@ -86,6 +91,9 @@ export default function MapLibreCampusMap({
     const mapContainer = useRef<HTMLDivElement>(null)
     const map = useRef<maplibregl.Map | null>(null)
     const markersRef = useRef<{ [id: string]: maplibregl.Marker }>({})
+    const pinnedMarkerRef = useRef<maplibregl.Marker | null>(null)
+    const walkerMarkerRef = useRef<maplibregl.Marker | null>(null)
+    const walkerAnimRef = useRef<number | null>(null)
     const [isFirstPerson, setIsFirstPerson] = useState(false)
     const keysPressed = useRef<Set<string>>(new Set())
     const animationRef = useRef<number | null>(null)
@@ -435,7 +443,7 @@ export default function MapLibreCampusMap({
         }
     }, [places, selectedCategoryIds, mapLoaded, getCategoryColor, onPlaceClick])
 
-    // Fly to selected place
+    // Fly to selected place (just camera, no route)
     useEffect(() => {
         if (!map.current || !flyToPlace?.latitude || !flyToPlace?.longitude) return
         map.current.flyTo({
@@ -446,6 +454,47 @@ export default function MapLibreCampusMap({
             essential: true
         })
     }, [flyToPlace])
+
+    // Sync pinnedCoords to a geo-anchored map marker
+    useEffect(() => {
+        if (!map.current || !mapLoaded) return
+        if (pinnedCoords) {
+            if (!pinnedMarkerRef.current) {
+                const el = document.createElement('div')
+                el.style.cssText = `
+                    width: 36px; height: 48px;
+                    display: flex; flex-direction: column; align-items: center;
+                    pointer-events: none;
+                `
+                el.innerHTML = `
+                    <div style="
+                        width: 36px; height: 36px;
+                        background: #6366f1;
+                        border-radius: 50% 50% 50% 4px;
+                        transform: rotate(-45deg);
+                        display: flex; align-items: center; justify-content: center;
+                        border: 3px solid white;
+                        box-shadow: 0 4px 16px rgba(99,102,241,0.6);
+                        animation: pinBounce 0.5s cubic-bezier(0.34,1.56,0.64,1);
+                    ">
+                        <span style="transform:rotate(45deg); font-size:16px;">📍</span>
+                    </div>
+                    <div style="
+                        width: 6px; height: 6px; background: #6366f1;
+                        border-radius: 50%; margin-top: -2px; opacity: 0.5;
+                    "></div>
+                `
+                pinnedMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+                    .setLngLat([pinnedCoords.lng, pinnedCoords.lat])
+                    .addTo(map.current!)
+            } else {
+                pinnedMarkerRef.current.setLngLat([pinnedCoords.lng, pinnedCoords.lat])
+            }
+        } else {
+            pinnedMarkerRef.current?.remove()
+            pinnedMarkerRef.current = null
+        }
+    }, [pinnedCoords, mapLoaded])
 
     // Search - filter/fly to matching place
     useEffect(() => {
@@ -548,7 +597,16 @@ export default function MapLibreCampusMap({
         }
     }, [])
 
-    const drawRoute = useCallback(async (endLat: number, endLng: number) => {
+    const stopWalker = useCallback(() => {
+        if (walkerAnimRef.current) {
+            cancelAnimationFrame(walkerAnimRef.current)
+            walkerAnimRef.current = null
+        }
+        walkerMarkerRef.current?.remove()
+        walkerMarkerRef.current = null
+    }, [])
+
+    const drawRoute = useCallback(async (endLat: number, endLng: number, animate = false) => {
         if (!map.current || !userLocation.current) return
         try {
             const start = userLocation.current
@@ -557,67 +615,125 @@ export default function MapLibreCampusMap({
             const data = await res.json()
             if (data.routes && data.routes.length > 0) {
                 const route = data.routes[0].geometry
-                
+                const coords: [number, number][] = route.coordinates
+
                 if (map.current.getSource('route')) {
                     (map.current.getSource('route') as maplibregl.GeoJSONSource).setData({
-                        type: 'Feature',
-                        properties: {},
-                        geometry: route
+                        type: 'Feature', properties: {}, geometry: route
                     })
                 } else {
                     map.current.addSource('route', {
                         type: 'geojson',
-                        data: {
-                            type: 'Feature',
-                            properties: {},
-                            geometry: route
-                        }
+                        data: { type: 'Feature', properties: {}, geometry: route }
                     })
                     map.current.addLayer({
-                        id: 'route-line-outline',
-                        type: 'line',
-                        source: 'route',
+                        id: 'route-line-outline', type: 'line', source: 'route',
                         layout: { 'line-join': 'round', 'line-cap': 'round' },
                         paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 }
                     })
                     map.current.addLayer({
-                        id: 'route-line',
-                        type: 'line',
-                        source: 'route',
+                        id: 'route-line', type: 'line', source: 'route',
                         layout: { 'line-join': 'round', 'line-cap': 'round' },
                         paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 1 }
                     })
+                }
+
+                if (animate && coords.length > 1) {
+                    stopWalker()
+
+                    // Create walker marker
+                    const walkerEl = document.createElement('div')
+                    walkerEl.style.cssText = `
+                        width: 28px; height: 28px;
+                        background: #22c55e;
+                        border: 3px solid white;
+                        border-radius: 50%;
+                        box-shadow: 0 0 0 4px rgba(34,197,94,0.35), 0 4px 12px rgba(0,0,0,0.4);
+                        display: flex; align-items: center; justify-content: center;
+                        font-size: 14px;
+                    `
+                    walkerEl.textContent = '🚶'
+
+                    walkerMarkerRef.current = new maplibregl.Marker({ element: walkerEl, anchor: 'center' })
+                        .setLngLat(coords[0])
+                        .addTo(map.current!)
+
+                    // Fly camera to start of route, following the walker
+                    map.current.flyTo({
+                        center: coords[0],
+                        zoom: 18, pitch: 60, duration: 1500, essential: true
+                    })
+
+                    // Animate walker along route
+                    const totalPoints = coords.length
+                    const duration = Math.max(totalPoints * 80, 4000) // ms
+                    const startTime = performance.now()
+
+                    const step = (now: number) => {
+                        if (!map.current || !walkerMarkerRef.current) return
+                        const elapsed = now - startTime
+                        const t = Math.min(elapsed / duration, 1)
+                        const idx = Math.floor(t * (totalPoints - 1))
+                        const nextIdx = Math.min(idx + 1, totalPoints - 1)
+                        const localT = t * (totalPoints - 1) - idx
+
+                        // Interpolate between two coords
+                        const lng = coords[idx][0] + (coords[nextIdx][0] - coords[idx][0]) * localT
+                        const lat = coords[idx][1] + (coords[nextIdx][1] - coords[idx][1]) * localT
+
+                        walkerMarkerRef.current.setLngLat([lng, lat])
+                        // Follow walker with camera smoothly
+                        map.current.easeTo({ center: [lng, lat], duration: 100, easing: (x) => x })
+
+                        if (t < 1) {
+                            walkerAnimRef.current = requestAnimationFrame(step)
+                        } else {
+                            // Arrived - stop and clean up walker after a moment
+                            setTimeout(() => stopWalker(), 2000)
+                        }
+                    }
+                    walkerAnimRef.current = requestAnimationFrame(step)
                 }
             }
         } catch (err) {
             console.error('Routing error', err)
         }
-    }, [])
+    }, [stopWalker])
 
+    // Draw route (no animation) when a place is selected
     useEffect(() => {
-        const checkAndDraw = () => {
-            // We use flyToPlace as the trigger source so it also triggers when user hits "Fly To" in UI
-            const targetPlace = flyToPlace || selectedPlace;
-            if (targetPlace?.latitude && targetPlace?.longitude) {
-                if (userLocation.current) {
-                    drawRoute(targetPlace.latitude, targetPlace.longitude)
-                } else {
-                    navigator.geolocation.getCurrentPosition((pos) => {
-                        userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-                        drawRoute(targetPlace.latitude!, targetPlace.longitude!)
-                    }, () => {
-                        console.log('Location not available')
-                    }, { enableHighAccuracy: true })
-                }
-            } else {
-                handleRemoveRoute()
-            }
+        if (!selectedPlace?.latitude || !selectedPlace?.longitude) {
+            handleRemoveRoute()
+            stopWalker()
+            return
         }
-        checkAndDraw()
-        const onUpdate = () => checkAndDraw()
-        window.addEventListener('userLocationUpdate', onUpdate)
-        return () => window.removeEventListener('userLocationUpdate', onUpdate)
-    }, [selectedPlace, flyToPlace, drawRoute, handleRemoveRoute])
+        const draw = () => drawRoute(selectedPlace.latitude!, selectedPlace.longitude!, false)
+        if (userLocation.current) {
+            draw()
+        } else {
+            navigator.geolocation.getCurrentPosition((pos) => {
+                userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+                draw()
+            }, () => {}, { enableHighAccuracy: true })
+        }
+        const onLocUpdate = () => draw()
+        window.addEventListener('userLocationUpdate', onLocUpdate)
+        return () => window.removeEventListener('userLocationUpdate', onLocUpdate)
+    }, [selectedPlace, drawRoute, handleRemoveRoute, stopWalker])
+
+    // Navigate with walking animation when navigateToPlace changes
+    useEffect(() => {
+        if (!navigateToPlace?.latitude || !navigateToPlace?.longitude) return
+        const navigate = () => drawRoute(navigateToPlace.latitude!, navigateToPlace.longitude!, true)
+        if (userLocation.current) {
+            navigate()
+        } else {
+            navigator.geolocation.getCurrentPosition((pos) => {
+                userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+                navigate()
+            }, () => { console.log('Location unavailable') }, { enableHighAccuracy: true })
+        }
+    }, [navigateToPlace, drawRoute])
 
     return (
         <div className="w-full h-full relative">

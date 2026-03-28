@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import ImageUpload from '@/components/ImageUpload'
 
 interface Category {
     id: string
@@ -29,6 +30,7 @@ export default function AddPlacePage() {
     const [blockId, setBlockId] = useState('')
     const [latitude, setLatitude] = useState('')
     const [longitude, setLongitude] = useState('')
+    const [photo, setPhoto] = useState<string | null>(null)
 
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState('')
@@ -92,7 +94,8 @@ export default function AddPlacePage() {
                     name, description, categoryId,
                     blockId: blockId || undefined,
                     latitude: latitude ? parseFloat(latitude) : undefined,
-                    longitude: longitude ? parseFloat(longitude) : undefined
+                    longitude: longitude ? parseFloat(longitude) : undefined,
+                    photo
                 })
             })
             const data = await res.json()
@@ -181,6 +184,15 @@ export default function AddPlacePage() {
                                 rows={3}
                                 placeholder="Brief description of this place..."
                                 className="w-full px-4 py-3.5 rounded-2xl border border-white/10 bg-white/5 text-white placeholder-white/25 focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/60 outline-none text-sm transition-all resize-none"
+                            />
+                        </div>
+
+                        {/* Photo (Optional) */}
+                        <div>
+                            <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">Photo (Optional)</label>
+                            <ImageUpload
+                                onImageSelect={(_, base64) => setPhoto(base64)}
+                                className="w-full rounded-2xl border border-white/10 bg-white/5"
                             />
                         </div>
 

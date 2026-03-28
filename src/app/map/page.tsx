@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Place, Category } from '@/components/MapLibreCampusMap'
+import ImageUpload from '@/components/ImageUpload'
 
 const MapLibreCampusMap = dynamic(() => import('@/components/MapLibreCampusMap'), {
     ssr: false,
@@ -52,11 +53,12 @@ export default function MapPage() {
     // Add place state
     const [addMode, setAddMode] = useState<'idle' | 'pin-drop' | 'form'>('idle')
     const [pinnedCoords, setPinnedCoords] = useState<{ lat: number; lng: number } | null>(null)
-    const [addForm, setAddForm] = useState({ name: '', description: '', categoryId: '', blockId: '' })
+    const [addForm, setAddForm] = useState({ name: '', description: '', categoryId: '', blockId: '', photo: '' as string | null })
     const [blocks, setBlocks] = useState<{ id: string; name: string }[]>([])
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [submitSuccess, setSubmitSuccess] = useState(false)
     const [submitError, setSubmitError] = useState('')
+    const [navigateToPlace, setNavigateToPlace] = useState<Place | null>(null)
 
     // New category state
     const [showNewCat, setShowNewCat] = useState(false)
@@ -64,6 +66,16 @@ export default function MapPage() {
     const [newCatIcon, setNewCatIcon] = useState('📍')
     const [creatingCat, setCreatingCat] = useState(false)
     const [catError, setCatError] = useState('')
+
+    // Review & Photo addition state
+    const [reviewingPlaceId, setReviewingPlaceId] = useState<string | null>(null)
+    const [reviewRating, setReviewRating] = useState(5)
+    const [reviewComment, setReviewComment] = useState('')
+    const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+    
+    const [addingPhotoPlaceId, setAddingPhotoPlaceId] = useState<string | null>(null)
+    const [newPhotoBase64, setNewPhotoBase64] = useState<string | null>(null)
+    const [isSubmittingPhoto, setIsSubmittingPhoto] = useState(false)
 
     const catColorMap = useRef<Map<string, string>>(new Map())
     const searchTimeout = useRef<NodeJS.Timeout | null>(null)
@@ -130,10 +142,22 @@ export default function MapPage() {
         )
     }
 
-    const handlePlaceClick = (place: Place) => {
+    const handlePlaceClick = async (place: Place) => {
+        // Optimistically set the base place
         setSelectedPlace(place)
         setFlyToPlace(place)
         setShowSearchResults(false)
+
+        // Fetch deep relations (photos, reviews) asynchronously
+        try {
+            const res = await fetch(`/api/places/${place.id}`)
+            if (res.ok) {
+                const data = await res.json()
+                setSelectedPlace(data.place)
+            }
+        } catch (e) {
+            console.error('Failed to fetch detailed place data', e)
+        }
     }
 
     const handleSearchSelect = (place: Place) => {
@@ -150,7 +174,7 @@ export default function MapPage() {
         setAddMode('pin-drop')
         setSelectedPlace(null)
         setPinnedCoords(null)
-        setAddForm({ name: '', description: '', categoryId: '', blockId: '' })
+        setAddForm({ name: '', description: '', categoryId: '', blockId: '', photo: null })
         setSubmitSuccess(false)
         setSubmitError('')
     }
@@ -213,6 +237,7 @@ export default function MapPage() {
                     blockId: addForm.blockId || undefined,
                     latitude: pinnedCoords?.lat,
                     longitude: pinnedCoords?.lng,
+                    photo: addForm.photo
                 })
             })
             const data = await res.json()
@@ -235,6 +260,58 @@ export default function MapPage() {
         }
     }
 
+    const handleSubmitReview = async () => {
+        if (!selectedPlace || !currentUser) return
+        if (!reviewComment.trim()) return
+        setIsSubmittingReview(true)
+        try {
+            const res = await fetch(`/api/places/${selectedPlace.id}/reviews`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rating: reviewRating, comment: reviewComment.trim() })
+            })
+            if (res.ok) {
+                const data = await res.json()
+                setReviewingPlaceId(null)
+                setReviewComment('')
+                setReviewRating(5)
+                // Reload places to update
+                fetch('/api/places').then(r => r.json()).then(d => {
+                    setPlaces(d.places || [])
+                    const updated = (d.places || []).find((p: Place) => p.id === selectedPlace.id)
+                    if (updated) setSelectedPlace(updated)
+                })
+            }
+        } finally {
+            setIsSubmittingReview(false)
+        }
+    }
+
+    const handleSubmitPhoto = async () => {
+        if (!selectedPlace || !currentUser || !newPhotoBase64) return
+        setIsSubmittingPhoto(true)
+        try {
+            const res = await fetch(`/api/places/${selectedPlace.id}/photos`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ photoUrl: newPhotoBase64 })
+            })
+            if (res.ok) {
+                const data = await res.json()
+                setAddingPhotoPlaceId(null)
+                setNewPhotoBase64(null)
+                // Reload places to update
+                fetch('/api/places').then(r => r.json()).then(d => {
+                    setPlaces(d.places || [])
+                    const updated = (d.places || []).find((p: Place) => p.id === selectedPlace.id)
+                    if (updated) setSelectedPlace(updated)
+                })
+            }
+        } finally {
+            setIsSubmittingPhoto(false)
+        }
+    }
+
     const placesWithCoords = places.filter(p => p.latitude && p.longitude)
 
     return (
@@ -248,6 +325,8 @@ export default function MapPage() {
                     searchQuery={searchQuery}
                     pinDropMode={addMode === 'pin-drop'}
                     flyToPlace={flyToPlace}
+                    navigateToPlace={navigateToPlace}
+                    pinnedCoords={pinnedCoords}
                     selectedPlace={selectedPlace}
                     onMapClick={handleMapClick}
                     onPlaceClick={handlePlaceClick}
@@ -379,7 +458,7 @@ export default function MapPage() {
                             <div className="w-10 h-1 bg-gray-200 rounded-full" />
                         </div>
 
-                        <div className="px-5 pb-6 pt-2">
+                        <div className="px-5 pb-6 pt-2 max-h-[75vh] overflow-y-auto overflow-x-hidden">
                             {/* Header */}
                             <div className="flex items-start gap-3 mb-4">
                                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
@@ -434,17 +513,18 @@ export default function MapPage() {
                                 <button
                                     onClick={() => {
                                         if (selectedPlace.latitude && selectedPlace.longitude) {
-                                            setFlyToPlace(selectedPlace)
+                                            // Use a new object reference to re-trigger the effect even if same place
+                                            setNavigateToPlace({ ...selectedPlace })
+                                            setFlyToPlace(null)
                                         }
                                     }}
                                     className="flex-1 py-3 text-sm font-semibold text-white rounded-xl flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
-                                    style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', boxShadow: '0 4px 16px rgba(99,102,241,0.4)' }}
+                                    style={{ background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)', boxShadow: '0 4px 16px rgba(34,197,94,0.4)' }}
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                     </svg>
-                                    Fly To
+                                    Navigate
                                 </button>
                                 <button
                                     onClick={() => setSelectedPlace(null)}
@@ -452,6 +532,99 @@ export default function MapPage() {
                                 >
                                     Close
                                 </button>
+                            </div>
+
+                            <hr className="my-5 border-gray-100" />
+
+                            {/* Photos Section */}
+                            <div className="mb-6">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="font-bold text-gray-900 text-sm">Photos</h3>
+                                    {currentUser && addingPhotoPlaceId !== selectedPlace.id && (
+                                        <button onClick={() => setAddingPhotoPlaceId(selectedPlace.id)} className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors">+ Add Photo</button>
+                                    )}
+                                </div>
+                                
+                                {addingPhotoPlaceId === selectedPlace.id && (
+                                    <div className="mb-4 bg-gray-50 rounded-xl p-3 border border-gray-100">
+                                        <ImageUpload onImageSelect={(_, b64) => setNewPhotoBase64(b64)} className="w-full h-32 rounded-lg border-2 border-dashed bg-white overflow-hidden shadow-inner mb-3 flex items-center justify-center text-xs text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors" />
+                                        <div className="flex gap-2">
+                                            <button onClick={() => {setAddingPhotoPlaceId(null); setNewPhotoBase64(null)}} className="flex-1 py-2 rounded-lg text-xs font-semibold text-gray-600 bg-white border border-gray-200">Cancel</button>
+                                            <button onClick={handleSubmitPhoto} disabled={!newPhotoBase64 || isSubmittingPhoto} className="flex-1 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 disabled:opacity-50">Upload</button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedPlace.photos && selectedPlace.photos.length > 0 ? (
+                                    <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide -mx-5 px-5">
+                                        {selectedPlace.photos.map((photo, idx) => (
+                                            <div key={idx} className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100/50">
+                                                <img src={photo.photoUrl} alt="Location" className="w-full h-full object-cover select-none" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-400 italic">No photos yet.</p>
+                                )}
+                            </div>
+
+                            {/* Reviews Section */}
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-bold text-gray-900 text-sm">Reviews</h3>
+                                        {selectedPlace.reviews && selectedPlace.reviews.length > 0 && (
+                                            <span className="flex items-center gap-1 text-xs font-semibold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
+                                                ⭐ {(selectedPlace.reviews.reduce((acc, r) => acc + r.rating, 0) / selectedPlace.reviews.length).toFixed(1)} 
+                                                <span className="opacity-60 font-normal">({selectedPlace.reviews.length})</span>
+                                            </span>
+                                        )}
+                                    </div>
+                                    {currentUser && reviewingPlaceId !== selectedPlace.id && !selectedPlace.reviews?.some(r => r.user.id === currentUser.id) && (
+                                        <button onClick={() => setReviewingPlaceId(selectedPlace.id)} className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors">Write a Review</button>
+                                    )}
+                                </div>
+
+                                {reviewingPlaceId === selectedPlace.id && (
+                                    <div className="mb-5 bg-gray-50 rounded-xl p-4 border border-gray-100 shadow-sm">
+                                        <div className="flex gap-1 mb-3">
+                                            {[1,2,3,4,5].map(star => (
+                                                <button key={star} onClick={() => setReviewRating(star)} className={`text-xl transition-all ${reviewRating >= star ? 'text-amber-400 drop-shadow-sm scale-110' : 'text-gray-300'}`}>⭐</button>
+                                            ))}
+                                        </div>
+                                        <textarea value={reviewComment} onChange={e => setReviewComment(e.target.value)} placeholder="Share details of your experience..." rows={3} className="w-full p-3 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 mb-3 resize-none bg-white placeholder-gray-400" />
+                                        <div className="flex gap-2">
+                                            <button onClick={() => {setReviewingPlaceId(null); setReviewComment(''); setReviewRating(5)}} className="px-4 py-2 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors">Cancel</button>
+                                            <button onClick={handleSubmitReview} disabled={!reviewComment.trim() || isSubmittingReview} className="flex-1 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 disabled:opacity-50 transition-all hover:bg-indigo-700">Submit Review</button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-4">
+                                    {selectedPlace.reviews && selectedPlace.reviews.length > 0 ? (
+                                        selectedPlace.reviews.map(review => (
+                                            <div key={review.id} className="pb-4 border-b border-gray-50 last:border-0 last:pb-0">
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 text-white flex items-center justify-center text-[10px] font-bold shadow-sm">
+                                                            {review.user.name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <span className="font-semibold text-gray-800 text-sm">{review.user.name}</span>
+                                                        {currentUser?.id === review.user.id && (
+                                                            <span className="text-[10px] bg-indigo-50 text-indigo-500 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">You</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex text-[10px] text-amber-400 drop-shadow-sm gap-[1px]">
+                                                        {Array(5).fill(0).map((_, i) => <span key={i} className={i < review.rating ? 'opacity-100' : 'opacity-30 grayscale'}>⭐</span>)}
+                                                    </div>
+                                                </div>
+                                                <p className="text-gray-600 text-sm leading-relaxed">{review.comment}</p>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-xs text-gray-400 italic">No reviews yet. Be the first to review!</p>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -530,6 +703,15 @@ export default function MapPage() {
                                                 rows={2}
                                                 className="w-full px-4 py-3 rounded-xl outline-none text-sm transition-all resize-none text-white placeholder-white/25"
                                                 style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
+                                            />
+                                        </div>
+
+                                        {/* Photo Upload */}
+                                        <div>
+                                            <label className="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-1.5">Photo (Optional)</label>
+                                            <ImageUpload 
+                                                onImageSelect={(_, b64) => setAddForm(p => ({ ...p, photo: b64 }))}
+                                                className="w-full rounded-xl overflow-hidden border border-white/12"
                                             />
                                         </div>
 

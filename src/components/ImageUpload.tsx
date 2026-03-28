@@ -4,7 +4,7 @@ import { useState, useRef, ChangeEvent } from 'react'
 import Image from 'next/image'
 
 interface ImageUploadProps {
-    onImageSelect: (file: File) => void
+    onImageSelect: (file: File | null, base64: string | null) => void
     currentImage?: string | null
     className?: string
 }
@@ -31,17 +31,18 @@ export default function ImageUpload({
             return
         }
 
-        if (file.size > 5 * 1024 * 1024) {
-            alert('Image must be less than 5MB')
+        if (file.size > 1 * 1024 * 1024) {
+            alert('Image must be less than 1MB')
             return
         }
 
         const reader = new FileReader()
         reader.onload = (e) => {
-            setPreview(e.target?.result as string)
+            const b64 = e.target?.result as string
+            setPreview(b64)
+            onImageSelect(file, b64)
         }
         reader.readAsDataURL(file)
-        onImageSelect(file)
     }
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -74,6 +75,7 @@ export default function ImageUpload({
         if (fileInputRef.current) {
             fileInputRef.current.value = ''
         }
+        onImageSelect(null, null)
     }
 
     return (
@@ -128,7 +130,7 @@ export default function ImageUpload({
                         <p className="text-sm text-gray-600 text-center">
                             <span className="font-medium text-blue-600">Click to upload</span> or drag and drop
                         </p>
-                        <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF up to 5MB</p>
+                        <p className="text-xs text-gray-400 mt-1">PNG, JPG up to 1MB</p>
                     </div>
                 )}
             </div>

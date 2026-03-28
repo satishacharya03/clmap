@@ -59,6 +59,18 @@ export async function GET(
                     (SELECT jsonb_agg(pp.*) FROM place_photos pp WHERE pp."placeId" = p.id),
                     '[]'::jsonb
                 ) as photos,
+                coalesce(
+                    (SELECT jsonb_agg(
+                        jsonb_build_object(
+                            'id', rv.id,
+                            'rating', rv.rating,
+                            'comment', rv.comment,
+                            'createdAt', rv."createdAt",
+                            'user', jsonb_build_object('id', ru.id, 'name', ru.name)
+                        )
+                    ) FROM reviews rv JOIN users ru ON rv."userId" = ru.id WHERE rv."placeId" = p.id),
+                    '[]'::jsonb
+                ) as reviews,
                 jsonb_build_object('id', u.id, 'name', u.name) as "createdBy"
             FROM places p
             LEFT JOIN place_categories pc ON p."categoryId" = pc.id

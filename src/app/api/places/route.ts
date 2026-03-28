@@ -1,5 +1,3 @@
-
-
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/edge-db'
 import { getCurrentUser } from '@/lib/auth'
@@ -20,10 +18,6 @@ export async function GET(request: NextRequest) {
                 to_jsonb(b.*) as block,
                 to_jsonb(f.*) as floor,
                 to_jsonb(r.*) as room,
-                coalesce(
-                    (SELECT jsonb_agg(pp.*) FROM place_photos pp WHERE pp."placeId" = p.id),
-                    '[]'::jsonb
-                ) as photos,
                 jsonb_build_object('id', u.id, 'name', u.name) as "createdBy"
             FROM places p
             LEFT JOIN place_categories pc ON p."categoryId" = pc.id
@@ -76,7 +70,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json()
-        const { name, description, categoryId, latitude, longitude, blockId, floorId, roomId } = body
+        const { name, description, categoryId, latitude, longitude, blockId, floorId, roomId, photo } = body
 
         // Validate input
         const errors = validatePlace({ name, description, categoryId, latitude, longitude, blockId, floorId, roomId })
@@ -119,6 +113,13 @@ export async function POST(request: NextRequest) {
                 [placeId]
             )
 
+            if (photo) {
+                await pool.query(
+                    `INSERT INTO place_photos (id, "photoUrl", "placeId") VALUES (gen_random_uuid(), $1, $2)`,
+                    [photo, placeId]
+                )
+            }
+
             await pool.query('COMMIT')
 
             // Fetch full relations for response to match previous behavior
@@ -154,7 +155,6 @@ export async function POST(request: NextRequest) {
         )
     }
 }
-
 
 export const runtime = 'edge';
 
