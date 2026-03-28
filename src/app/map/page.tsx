@@ -419,17 +419,13 @@ export default function MapPage() {
                 )}
             </div>
 
-            {/* ─── CAMPUS BADGE ─── */}
-            <div className="absolute top-4 right-4 z-20 hidden md:block">
-                <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-2.5 shadow-lg">
-                    <div className="flex items-center gap-2.5">
-                        <span className="text-2xl">🎓</span>
-                        <div>
-                            <p className="font-bold text-white text-sm leading-tight">Chandigarh University</p>
-                            <p className="text-white/50 text-xs">3D Campus Map</p>
-                        </div>
+            {/* ─── PROFILE BUTTON ─── */}
+            <div className="absolute top-4 right-4 z-20">
+                <Link href="/profile" className="flex items-center gap-2.5 bg-white/10 hover:bg-white/20 transition-all backdrop-blur-md border border-white/20 rounded-full px-2 py-2 pr-4 shadow-lg group">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-inner" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
+                        {currentUser ? currentUser.name.charAt(0).toUpperCase() : '👤'}
                     </div>
-                </div>
+                </Link>
             </div>
 
             {/* ─── PIN DROP INSTRUCTION TOAST ─── */}

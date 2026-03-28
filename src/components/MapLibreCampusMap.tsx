@@ -340,7 +340,7 @@ export default function MapLibreCampusMap({
         map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), 'bottom-right')
         
         const gc = new maplibregl.GeolocateControl({ 
-            positionOptions: { enableHighAccuracy: true }, 
+            positionOptions: { enableHighAccuracy: true, maximumAge: 0, timeout: 27000 }, 
             trackUserLocation: true, 
             showAccuracyCircle: true,
             showUserLocation: true 
@@ -627,7 +627,7 @@ export default function MapLibreCampusMap({
         if (!selectedPlace?.latitude || !selectedPlace?.longitude) { handleRemoveRoute(); stopWalker(); return }
         const draw = () => drawRoute(selectedPlace.latitude!, selectedPlace.longitude!, false)
         if (userLocation.current) draw()
-        else navigator.geolocation.getCurrentPosition(pos => { userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }; draw() }, () => { }, { enableHighAccuracy: true, timeout: 5000 })
+        else navigator.geolocation.getCurrentPosition(pos => { userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }; draw() }, () => { }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 })
         const onLoc = () => draw()
         window.addEventListener('userLocationUpdate', onLoc)
         return () => window.removeEventListener('userLocationUpdate', onLoc)
@@ -638,7 +638,7 @@ export default function MapLibreCampusMap({
         setNavStatus('locating')
         const go = () => drawRoute(navigateToPlace.latitude!, navigateToPlace.longitude!, true)
         if (userLocation.current) go()
-        else navigator.geolocation.getCurrentPosition(pos => { userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }; go() }, () => setNavStatus('error'), { enableHighAccuracy: true, timeout: 8000 })
+        else navigator.geolocation.getCurrentPosition(pos => { userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }; go() }, () => setNavStatus('error'), { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 })
     }, [navigateToPlace, drawRoute])
 
     return (
@@ -647,11 +647,11 @@ export default function MapLibreCampusMap({
 
             {/* Navigation status overlay */}
             {navStatus !== 'idle' && (
-                <div className="absolute bottom-8 right-16 z-50 pointer-events-none origin-bottom-right scale-90 md:scale-100">
-                    {navStatus === 'locating' && <div className="bg-gray-900/95 text-white px-6 py-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3"><div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /><span className="text-sm font-semibold">Getting your location…</span></div>}
-                    {navStatus === 'routing' && <div className="bg-gray-900/95 text-white px-6 py-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3"><div className="w-5 h-5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" /><span className="text-sm font-semibold">Calculating route…</span></div>}
-                    {navStatus === 'walking' && <div className="bg-gray-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl border border-green-500/30 flex items-center gap-3"><div className="w-3 h-3 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.8)]" /><span className="text-sm font-semibold text-green-400">Navigating live…</span></div>}
-                    {navStatus === 'error' && <div className="bg-red-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl border border-red-500/30 flex items-center gap-3"><span>⚠️</span><span className="text-sm font-semibold">Could not get location. Please enable GPS.</span></div>}
+                <div className="absolute top-[80px] right-4 z-50 pointer-events-none origin-top-right scale-90 md:scale-100">
+                    {navStatus === 'locating' && <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-2.5"><div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /><span className="text-xs font-semibold">Getting location…</span></div>}
+                    {navStatus === 'routing' && <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-2.5"><div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" /><span className="text-xs font-semibold">Calculating route…</span></div>}
+                    {navStatus === 'walking' && <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-green-500/30 flex items-center gap-2.5"><div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.8)]" /><span className="text-xs font-semibold text-green-400">Navigating live…</span></div>}
+                    {navStatus === 'error' && <div className="bg-red-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-red-500/30 flex items-center gap-2.5"><span className="text-sm">⚠️</span><span className="text-xs font-semibold">Location error. Enable GPS.</span></div>}
                 </div>
             )}
 
@@ -659,10 +659,10 @@ export default function MapLibreCampusMap({
             {!pinDropMode && (
                 <div className="absolute top-4 right-4 z-10 flex gap-2">
                     <button onClick={toggleSatellite} className={`px-4 py-2.5 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center gap-2 backdrop-blur-md border ${isSatellite ? 'bg-indigo-500/90 border-indigo-400 text-white' : 'bg-white/90 border-white/60 text-gray-700 hover:bg-white'}`} title="Toggle satellite view">
-                        {isSatellite ? <><span>🗺️</span> Map</> : <><span>🛰️</span> Satellite</>}
+                        {isSatellite ? <><span>🗺️</span></> : <><span>🛰️</span></>}
                     </button>
                     <button onClick={() => setIsFirstPerson(!isFirstPerson)} className={`px-4 py-2.5 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center gap-2 backdrop-blur-md border ${isFirstPerson ? 'bg-indigo-500/90 border-indigo-400 text-white' : 'bg-white/90 border-white/60 text-gray-700 hover:bg-white'}`}>
-                        {isFirstPerson ? <><span>🚶</span> Street View</> : <><span>🦅</span> Aerial</>}
+                        {isFirstPerson ? <><span>🚶</span></> : <><span>🦅</span></>}
                     </button>
                 </div>
             )}
