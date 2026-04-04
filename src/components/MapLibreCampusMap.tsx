@@ -13,6 +13,15 @@ function isWithinCU(lat: number, lng: number) {
     return lat >= 30.7600 && lat <= 30.7800 && lng >= 76.5600 && lng <= 76.5900;
 }
 
+function calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number) {
+    const toRad = Math.PI / 180;
+    const toDeg = 180 / Math.PI;
+    const dLng = (lng2 - lng1) * toRad;
+    const y = Math.sin(dLng) * Math.cos(lat2 * toRad);
+    const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) - Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLng);
+    return (Math.atan2(y, x) * toDeg + 360) % 360;
+}
+
 const CU_CAMPUS_BOUNDARY: [number, number][] = [
     [76.5680, 30.7750],
     [76.5850, 30.7750],
@@ -193,6 +202,7 @@ export default function MapLibreCampusMap({
     const layersAdded = useRef(false)
     const userLocation = useRef<{ lat: number; lng: number } | null>(null)
     const [navStatus, setNavStatus] = useState<'idle' | 'locating' | 'routing' | 'walking' | 'error'>('idle')
+    const [navStats, setNavStats] = useState<{ dist: number, time: number } | null>(null)
 
     const categoryColorMap = useRef<Map<string, string>>(new Map())
     const getCategoryColor = useCallback((catId: string) => {
@@ -343,8 +353,8 @@ export default function MapLibreCampusMap({
             maxPitch: 85,
             dragRotate: true,
             maxBounds: [
-                [76.56, 30.76],
-                [76.59, 30.78]
+                [76.568, 30.763],
+                [76.585, 30.775]
             ],
         })
         map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), 'bottom-right')
@@ -567,6 +577,7 @@ export default function MapLibreCampusMap({
             geolocateControlRef.current.trigger() // Togging trigger when ON turns it OFF
         }
         setNavStatus('idle')
+        setNavStats(null)
     }, [])
 
     const drawRoute = useCallback(async (endLat: number, endLng: number, animate = false) => {
@@ -579,6 +590,19 @@ export default function MapLibreCampusMap({
             const data = await res.json()
             if (data.routes?.length > 0) {
                 const route = data.routes[0].geometry
+                const routeDist = data.routes[0].distance
+                const routeTime = data.routes[0].duration
+                
+                setNavStats({ dist: routeDist, time: routeTime })
+                
+                if (animate) {
+                    const targetBearing = calculateBearing(start.lat, start.lng, endLat, endLng)
+                    map.current.easeTo({
+                        bearing: targetBearing,
+                        pitch: 65,
+                        duration: 1500
+                    })
+                }
                 
                 // OSRM snaps to the nearest mapped road, which can be ~100m away on a campus. 
                 // We manually prepend the user's EXACT raw GPS coordinate, and append the EXACT 
@@ -703,7 +727,20 @@ export default function MapLibreCampusMap({
                 <div className="absolute top-[80px] right-4 z-50 pointer-events-none origin-top-right scale-90 md:scale-100">
                     {navStatus === 'locating' && <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-2.5"><div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /><span className="text-xs font-semibold">Getting location…</span></div>}
                     {navStatus === 'routing' && <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-2.5"><div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" /><span className="text-xs font-semibold">Calculating route…</span></div>}
-                    {navStatus === 'walking' && <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-green-500/30 flex items-center gap-2.5"><div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.8)]" /><span className="text-xs font-semibold text-green-400">Navigating live…</span></div>}
+                    {navStatus === 'walking' && (
+                        <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-green-500/30 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.8)]" />
+                                <span className="text-xs font-semibold text-green-400">Navigating live…</span>
+                            </div>
+                            {navStats && (
+                                <div className="flex flex-col border-l border-white/20 pl-4 items-end">
+                                    <span className="text-sm font-bold text-white">{Math.max(1, Math.round(navStats.time / 60))} min</span>
+                                    <span className="text-xs text-white/70">{(navStats.dist / 1000).toFixed(2)} km</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {navStatus === 'error' && <div className="bg-red-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-red-500/30 flex items-center gap-2.5"><span className="text-sm">⚠️</span><span className="text-xs font-semibold">Location error. Enable GPS.</span></div>}
                 </div>
             )}
