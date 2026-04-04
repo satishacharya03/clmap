@@ -166,9 +166,9 @@ export default function MapPage() {
         handlePlaceClick(place)
     }
 
-    const enterPinDrop = () => {
+    const enterPinDrop = useCallback(() => {
         if (!currentUser) {
-            router.push('/login?redirect=/map')
+            router.push('/login?redirect=' + encodeURIComponent('/map?action=add-place'))
             return
         }
         setAddMode('pin-drop')
@@ -177,7 +177,18 @@ export default function MapPage() {
         setAddForm({ name: '', description: '', categoryId: '', blockId: '', photos: [] })
         setSubmitSuccess(false)
         setSubmitError('')
-    }
+    }, [currentUser, router])
+
+    // Handle ?action=add-place from URL
+    useEffect(() => {
+        if (!isLoading) {
+            const query = new URLSearchParams(window.location.search);
+            if (query.get('action') === 'add-place') {
+                window.history.replaceState({}, '', '/map');
+                enterPinDrop();
+            }
+        }
+    }, [isLoading, enterPinDrop]);
 
     const handleMapClick = useCallback((lat: number, lng: number) => {
         if (addMode !== 'pin-drop') return

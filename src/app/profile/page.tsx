@@ -101,11 +101,11 @@ export default function ProfilePage() {
                             </h3>
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="p-5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
-                                    <div className="text-3xl mb-3 group-hover:scale-110 transition-transform origin-left">🗺️</div>
-                                    <h4 className="text-white font-semibold mb-1">Saved Places</h4>
-                                    <p className="text-white/40 text-xs">You haven't saved any locations yet.</p>
-                                </div>
+                                <Link href="/map?action=add-place" className="p-5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group block">
+                                    <div className="text-3xl mb-3 group-hover:scale-110 transition-transform origin-left">➕</div>
+                                    <h4 className="text-white font-semibold mb-1">Add New Place</h4>
+                                    <p className="text-white/40 text-xs">Help map the campus by adding new locations.</p>
+                                </Link>
                                 
                                 <div className="p-5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
                                     <div className="text-3xl mb-3 group-hover:scale-110 transition-transform origin-left">📍</div>

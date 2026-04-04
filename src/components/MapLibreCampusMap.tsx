@@ -7,6 +7,12 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // Chandigarh University Campus Center
 const CU_CENTER: [number, number] = [76.5766, 30.7699]
 
+const GATE_2_COORDS = { lat: 30.772796, lng: 76.576387 }
+
+function isWithinCU(lat: number, lng: number) {
+    return lat >= 30.7600 && lat <= 30.7800 && lng >= 76.5600 && lng <= 76.5900;
+}
+
 const CU_CAMPUS_BOUNDARY: [number, number][] = [
     [76.5680, 30.7750],
     [76.5850, 30.7750],
@@ -333,9 +339,13 @@ export default function MapLibreCampusMap({
             minZoom: 14,
             maxZoom: 20,
             pitch: 55,
-            bearing: -17.6,
+            bearing: 180,
             maxPitch: 85,
             dragRotate: true,
+            maxBounds: [
+                [76.56, 30.76],
+                [76.59, 30.78]
+            ],
         })
         map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), 'bottom-right')
         
@@ -349,7 +359,13 @@ export default function MapLibreCampusMap({
         map.current.addControl(gc, 'bottom-right')
         
         gc.on('geolocate', (e: any) => {
-            userLocation.current = { lat: e.coords.latitude, lng: e.coords.longitude }
+            let lat = e.coords.latitude;
+            let lng = e.coords.longitude;
+            if (!isWithinCU(lat, lng)) {
+                lat = GATE_2_COORDS.lat;
+                lng = GATE_2_COORDS.lng;
+            }
+            userLocation.current = { lat, lng }
             window.dispatchEvent(new CustomEvent('userLocationUpdate'))
         })
         map.current.on('styleimagemissing', (e) => {
@@ -536,8 +552,11 @@ export default function MapLibreCampusMap({
 
     const handleRemoveRoute = useCallback(() => {
         if (!map.current) return
-        if (map.current.getSource('route')) {
-            (map.current.getSource('route') as maplibregl.GeoJSONSource).setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } })
+        if (map.current.getSource('route-main')) {
+            (map.current.getSource('route-main') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] })
+        }
+        if (map.current.getSource('route-walk')) {
+            (map.current.getSource('route-walk') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] })
         }
     }, [])
 
@@ -570,41 +589,57 @@ export default function MapLibreCampusMap({
                     [endLng, endLat]
                 ]
                 
-                if (map.current.getSource('route')) {
-                    (map.current.getSource('route') as maplibregl.GeoJSONSource).setData({ type: 'Feature', properties: {}, geometry: route })
-                } else {
-                    map.current.addSource('route', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route } })
-                    map.current.addLayer({ id: 'route-line-outline', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 } })
-                    map.current.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 1 } })
+                if (!map.current.getSource('route-main')) {
+                    map.current.addSource('route-main', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+                    map.current.addSource('route-walk', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+                    
+                    map.current.addLayer({ id: 'route-walk-outline', type: 'line', source: 'route-walk', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.6 } })
+                    map.current.addLayer({ id: 'route-walk-line', type: 'line', source: 'route-walk', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 4, 'line-dasharray': [1, 1.5], 'line-opacity': 0.8 } })
+
+                    map.current.addLayer({ id: 'route-main-outline', type: 'line', source: 'route-main', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 } })
+                    map.current.addLayer({ id: 'route-main-line', type: 'line', source: 'route-main', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 1 } })
                 }
-                    // 1. Animate line drawing
-                    const totalPoints = coords.length
-                    const routeSource = map.current.getSource('route') as maplibregl.GeoJSONSource
+                
+                // 1. Animate line drawing
+                const totalPoints = coords.length
+                const routeMainSource = map.current.getSource('route-main') as maplibregl.GeoJSONSource
+                const routeWalkSource = map.current.getSource('route-walk') as maplibregl.GeoJSONSource
+                
+                const drawDuration = 1200
+                const startDrawTime = performance.now()
+                
+                map.current.flyTo({ center: coords[0], zoom: 17, pitch: 50, duration: 1500, essential: true })
+                
+                const animateLine = (now: number) => {
+                    const progress = Math.max(0, Math.min((now - startDrawTime) / drawDuration, 1))
+                    const currentFloatIndex = progress * (totalPoints - 1)
+                    const currentIntIndex = Math.floor(currentFloatIndex)
                     
-                    const drawDuration = 1200
-                    const startDrawTime = performance.now()
+                    const currentCoords = coords.slice(0, currentIntIndex + 1)
+                    if (currentIntIndex < totalPoints - 1) {
+                        const ratio = currentFloatIndex - currentIntIndex
+                        const p1 = coords[currentIntIndex]
+                        const p2 = coords[currentIntIndex + 1]
+                        currentCoords.push([
+                            p1[0] + (p2[0] - p1[0]) * ratio,
+                            p1[1] + (p2[1] - p1[1]) * ratio
+                        ])
+                    }
                     
-                    map.current.flyTo({ center: coords[0], zoom: 17, pitch: 50, duration: 1500, essential: true })
+                    const rdStart = 1;
+                    const rdEnd = totalPoints - 2;
                     
-                    const animateLine = (now: number) => {
-                        const progress = Math.max(0, Math.min((now - startDrawTime) / drawDuration, 1))
-                        const currentFloatIndex = progress * (totalPoints - 1)
-                        const currentIntIndex = Math.floor(currentFloatIndex)
-                        
-                        // Slice points up to current index + interpolate the last tip
-                        const currentCoords = coords.slice(0, currentIntIndex + 1)
-                        if (currentIntIndex < totalPoints - 1) {
-                            const ratio = currentFloatIndex - currentIntIndex
-                            const p1 = coords[currentIntIndex]
-                            const p2 = coords[currentIntIndex + 1]
-                            currentCoords.push([
-                                p1[0] + (p2[0] - p1[0]) * ratio,
-                                p1[1] + (p2[1] - p1[1]) * ratio
-                            ])
-                        }
-                        
-                        routeSource.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: currentCoords } })
-                        
+                    const w1 = currentCoords.slice(0, 2);
+                    const rd = currentCoords.length > rdStart ? currentCoords.slice(rdStart, Math.min(currentCoords.length, rdEnd + 1)) : [];
+                    const w2 = currentCoords.length > rdEnd ? currentCoords.slice(rdEnd) : [];
+                    
+                    const walkFeatures: any[] = []
+                    if (w1.length >= 2) walkFeatures.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: w1 } })
+                    if (w2.length >= 2) walkFeatures.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: w2 } })
+                    
+                    routeWalkSource.setData({ type: 'FeatureCollection', features: walkFeatures })
+                    routeMainSource.setData({ type: 'FeatureCollection', features: rd.length >= 2 ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: rd } }] : [] })
+                    
                         if (progress < 1) {
                             lineAnimRef.current = requestAnimationFrame(animateLine)
                         } else {
@@ -627,7 +662,16 @@ export default function MapLibreCampusMap({
         if (!selectedPlace?.latitude || !selectedPlace?.longitude) { handleRemoveRoute(); stopWalker(); return }
         const draw = () => drawRoute(selectedPlace.latitude!, selectedPlace.longitude!, false)
         if (userLocation.current) draw()
-        else navigator.geolocation.getCurrentPosition(pos => { userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }; draw() }, () => { }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 })
+        else navigator.geolocation.getCurrentPosition(pos => {
+            let lat = pos.coords.latitude;
+            let lng = pos.coords.longitude;
+            if (!isWithinCU(lat, lng)) {
+                lat = GATE_2_COORDS.lat;
+                lng = GATE_2_COORDS.lng;
+            }
+            userLocation.current = { lat, lng };
+            draw() 
+        }, () => { }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 })
         const onLoc = () => draw()
         window.addEventListener('userLocationUpdate', onLoc)
         return () => window.removeEventListener('userLocationUpdate', onLoc)
@@ -638,7 +682,16 @@ export default function MapLibreCampusMap({
         setNavStatus('locating')
         const go = () => drawRoute(navigateToPlace.latitude!, navigateToPlace.longitude!, true)
         if (userLocation.current) go()
-        else navigator.geolocation.getCurrentPosition(pos => { userLocation.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }; go() }, () => setNavStatus('error'), { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 })
+        else navigator.geolocation.getCurrentPosition(pos => {
+            let lat = pos.coords.latitude;
+            let lng = pos.coords.longitude;
+            if (!isWithinCU(lat, lng)) {
+                lat = GATE_2_COORDS.lat;
+                lng = GATE_2_COORDS.lng;
+            }
+            userLocation.current = { lat, lng };
+            go() 
+        }, () => setNavStatus('error'), { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 })
     }, [navigateToPlace, drawRoute])
 
     return (

@@ -41,7 +41,7 @@ export default function Header() {
 
     const navItems = [
         { href: '/map', label: 'Map', icon: '🗺️' },
-        { href: '/add-place', label: 'Add Place', icon: '➕' },
+        { href: '/map?action=add-place', label: 'Add Place', icon: '➕' },
         { href: '/parking', label: 'Parking', icon: '🅿️' },
     ]
 
@@ -168,7 +168,7 @@ export default function Header() {
                                                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/70 hover:text-white hover:bg-white/8 transition-all">
                                                 <span>🗺️</span> Map
                                             </Link>
-                                            <Link href="/add-place" onClick={() => setIsMenuOpen(false)}
+                                            <Link href="/map?action=add-place" onClick={() => setIsMenuOpen(false)}
                                                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/70 hover:text-white hover:bg-white/8 transition-all">
                                                 <span>➕</span> Add Place
                                             </Link>
