@@ -15,6 +15,7 @@ interface User {
 export default function ProfilePage() {
     const router = useRouter()
     const [user, setUser] = useState<User | null>(null)
+    const [stats, setStats] = useState<{places: number, reviews: number} | null>(null)
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
@@ -28,6 +29,8 @@ export default function ProfilePage() {
             .then(data => {
                 if (data.user) {
                     setUser(data.user)
+                    fetch('/api/auth/stats').then(r => r.ok ? r.json() : { stats: null })
+                        .then(d => d.stats && setStats(d.stats))
                 } else {
                     router.push('/login')
                 }
@@ -108,15 +111,15 @@ export default function ProfilePage() {
                                 </Link>
                                 
                                 <div className="p-5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
-                                    <div className="text-3xl mb-3 group-hover:scale-110 transition-transform origin-left">📍</div>
-                                    <h4 className="text-white font-semibold mb-1">Recent Routes</h4>
-                                    <p className="text-white/40 text-xs">View your navigation history.</p>
+                                    <div className="text-3xl mb-3 group-hover:scale-110 transition-transform origin-left">📊</div>
+                                    <h4 className="text-white font-semibold mb-1">Places Contributed</h4>
+                                    <p className="text-white/40 text-xs">You have added <span className="font-bold text-indigo-400">{stats ? stats.places : 0}</span> places.</p>
                                 </div>
                                 
                                 <div className="p-5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
                                     <div className="text-3xl mb-3 group-hover:scale-110 transition-transform origin-left">📝</div>
                                     <h4 className="text-white font-semibold mb-1">My Reviews</h4>
-                                    <p className="text-white/40 text-xs">Places you have rated on campus.</p>
+                                    <p className="text-white/40 text-xs">You have rated <span className="font-bold text-indigo-400">{stats ? stats.reviews : 0}</span> places.</p>
                                 </div>
                                 
                                 <div className="p-5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">

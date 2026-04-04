@@ -123,9 +123,9 @@ function ensurePinImage(
     // ── Circle body ──
     ctx.beginPath()
     ctx.arc(20, 18, 17, 0, Math.PI * 2)
-    ctx.fillStyle = color
+    ctx.fillStyle = 'white'
     ctx.fill()
-    ctx.strokeStyle = 'white'
+    ctx.strokeStyle = color
     ctx.lineWidth = selected ? 3.5 : 2.5
     ctx.stroke()
 
@@ -593,8 +593,8 @@ export default function MapLibreCampusMap({
                     map.current.addSource('route-main', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
                     map.current.addSource('route-walk', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
                     
-                    map.current.addLayer({ id: 'route-walk-outline', type: 'line', source: 'route-walk', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.6 } })
-                    map.current.addLayer({ id: 'route-walk-line', type: 'line', source: 'route-walk', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 4, 'line-dasharray': [1, 1.5], 'line-opacity': 0.8 } })
+                    map.current.addLayer({ id: 'route-walk-outline', type: 'line', source: 'route-walk', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 0, 'line-opacity': 0 } })
+                    map.current.addLayer({ id: 'route-walk-line', type: 'line', source: 'route-walk', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 2.5, 'line-dasharray': [0.1, 2.5], 'line-opacity': 0.8 } })
 
                     map.current.addLayer({ id: 'route-main-outline', type: 'line', source: 'route-main', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 } })
                     map.current.addLayer({ id: 'route-main-line', type: 'line', source: 'route-main', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 1 } })

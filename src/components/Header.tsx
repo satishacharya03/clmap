@@ -187,19 +187,7 @@ export default function Header() {
                                     </div>
                                 )}
                             </div>
-                        ) : (
-                            <div className="flex gap-2">
-                                <Link href="/login"
-                                    className="px-4 py-2 text-sm font-medium text-white/70 hover:text-white hover:bg-white/8 rounded-xl transition-all">
-                                    Login
-                                </Link>
-                                <Link href="/register"
-                                    className="px-4 py-2 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-95"
-                                    style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
-                                    Sign up
-                                </Link>
-                            </div>
-                        )}
+                        ) : null}
 
                         {/* Mobile hamburger */}
                         <button
