@@ -353,8 +353,8 @@ export default function MapLibreCampusMap({
             maxPitch: 85,
             dragRotate: true,
             maxBounds: [
-                [76.568, 30.763],
-                [76.585, 30.775]
+                [76.560, 30.755],
+                [76.595, 30.785]
             ],
         })
         map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), 'bottom-right')
@@ -595,15 +595,6 @@ export default function MapLibreCampusMap({
                 
                 setNavStats({ dist: routeDist, time: routeTime })
                 
-                if (animate) {
-                    const targetBearing = calculateBearing(start.lat, start.lng, endLat, endLng)
-                    map.current.easeTo({
-                        bearing: targetBearing,
-                        pitch: 65,
-                        duration: 1500
-                    })
-                }
-                
                 // OSRM snaps to the nearest mapped road, which can be ~100m away on a campus. 
                 // We manually prepend the user's EXACT raw GPS coordinate, and append the EXACT 
                 // building pin coordinate to the line so there is zero gap or misplacement shown.
@@ -612,6 +603,21 @@ export default function MapLibreCampusMap({
                     ...route.coordinates,
                     [endLng, endLat]
                 ]
+
+                if (animate) {
+                    const lookAhead = Math.min(3, coords.length - 1);
+                    const targetBearing = calculateBearing(coords[0][1], coords[0][0], coords[lookAhead][1], coords[lookAhead][0]);
+                    map.current.flyTo({
+                        center: coords[0],
+                        bearing: targetBearing,
+                        zoom: 17.5,
+                        pitch: 65,
+                        duration: 800,
+                        essential: true
+                    })
+                } else {
+                    map.current.flyTo({ center: coords[0], zoom: 17, pitch: 50, duration: 800, essential: true })
+                }
                 
                 if (!map.current.getSource('route-main')) {
                     map.current.addSource('route-main', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
@@ -629,10 +635,8 @@ export default function MapLibreCampusMap({
                 const routeMainSource = map.current.getSource('route-main') as maplibregl.GeoJSONSource
                 const routeWalkSource = map.current.getSource('route-walk') as maplibregl.GeoJSONSource
                 
-                const drawDuration = 1200
+                const drawDuration = 500
                 const startDrawTime = performance.now()
-                
-                map.current.flyTo({ center: coords[0], zoom: 17, pitch: 50, duration: 1500, essential: true })
                 
                 const animateLine = (now: number) => {
                     const progress = Math.max(0, Math.min((now - startDrawTime) / drawDuration, 1))
@@ -736,7 +740,7 @@ export default function MapLibreCampusMap({
                             {navStats && (
                                 <div className="flex flex-col border-l border-white/20 pl-4 items-end">
                                     <span className="text-sm font-bold text-white">{Math.max(1, Math.round(navStats.time / 60))} min</span>
-                                    <span className="text-xs text-white/70">{(navStats.dist / 1000).toFixed(2)} km</span>
+                                    <span className="text-xs text-white/70">{Math.round(navStats.dist)} m</span>
                                 </div>
                             )}
                         </div>
