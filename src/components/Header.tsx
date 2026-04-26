@@ -3,12 +3,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
+import { authClient } from '@/lib/auth-client'
 
 interface User {
     id: string
     name: string
     email: string
     role: string
+    emailVerified?: boolean
 }
 
 export default function Header() {
@@ -16,10 +18,13 @@ export default function Header() {
     const [user, setUser] = useState<User | null>(null)
     const [isMenuOpen, setIsMenuOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
+    const [resendStatus, setResendStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
     const menuRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
-        fetch('/api/auth/me').then(r => r.ok ? r.json() : null)
+        authClient.getSession()
+            .then(() => fetch('/api/auth/me'))
+            .then(r => r.ok ? r.json() : null)
             .then(d => { if (d) setUser(d.user) })
             .finally(() => setIsLoading(false))
     }, [])
@@ -37,6 +42,25 @@ export default function Header() {
         await fetch('/api/auth/logout', { method: 'POST' })
         setUser(null)
         window.location.href = '/login'
+    }
+
+    const handleResendVerification = async () => {
+        if (!user?.email) return
+        setResendStatus('loading')
+        try {
+            const { error } = await authClient.emailOtp.sendVerificationOtp({ email: user.email, type: 'email-verification' })
+            if (error) throw error
+            setResendStatus('sent')
+            setTimeout(() => setResendStatus('idle'), 5000)
+            
+            // Optionally, forward them to the login flow to verify their OTP
+            // You can replace this logic if you use magic links for verification instead
+            alert("Verification OTP sent! Please logout and sign in using your email to enter the OTP.");
+        } catch (err) {
+            console.error('Failed to resend:', err)
+            setResendStatus('error')
+            setTimeout(() => setResendStatus('idle'), 5000)
+        }
     }
 
     const navItems = [
@@ -62,6 +86,20 @@ export default function Header() {
                 borderBottom: isMap ? 'none' : '1px solid rgba(255,255,255,0.08)',
             }}
         >
+            {/* Unverified Banner */}
+            {user && user.emailVerified === false && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs md:text-sm font-medium z-50 relative animate-fade-in flex items-center justify-center gap-2">
+                    <span className="text-amber-200">Your email is unverified. Adding places and reviews is disabled.</span>
+                    <button
+                        onClick={handleResendVerification}
+                        disabled={resendStatus === 'loading' || resendStatus === 'sent'}
+                        className="ml-2 text-amber-400 hover:text-amber-300 underline disabled:opacity-50 disabled:no-underline whitespace-nowrap bg-amber-500/10 px-2 py-0.5 rounded-md hover:bg-amber-500/20 transition-colors"
+                    >
+                        {resendStatus === 'loading' ? 'Sending...' : resendStatus === 'sent' ? 'Link Sent ✓' : resendStatus === 'error' ? 'Failed ✕' : 'Resend Link'}
+                    </button>
+                </div>
+            )}
+            
             <div className="max-w-7xl mx-auto px-4">
                 <div className="flex items-center justify-between h-16">
                     {/* Logo */}

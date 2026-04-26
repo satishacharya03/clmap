@@ -68,6 +68,13 @@ export async function POST(request: NextRequest) {
                 { status: 401 }
             )
         }
+        
+        if (!user.emailVerified) {
+            return NextResponse.json(
+                { error: 'Email verification required to add places' },
+                { status: 403 }
+            )
+        }
 
         const body = await request.json()
         const { name, description, categoryId, latitude, longitude, blockId, floorId, roomId, photos } = body

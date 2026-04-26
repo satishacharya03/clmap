@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Place, Category } from '@/components/MapLibreCampusMap'
 import ImageUpload from '@/components/ImageUpload'
+import { authClient } from '@/lib/auth-client'
 
 // CACHE BUSTER: Force Next.js and browser to invalidate stale bundle
 const CACHE_BUSTER = Date.now();
@@ -102,7 +103,7 @@ export default function MapPage() {
                     fetch('/api/places').then(r => r.json()),
                     fetch('/api/categories').then(r => r.json()),
                     fetch('/api/blocks').then(r => r.ok ? r.json() : { blocks: [] }),
-                    fetch('/api/auth/me').then(r => r.ok ? r.json() : { user: null })
+                    authClient.getSession().then(() => fetch('/api/auth/me').then(r => r.ok ? r.json() : { user: null }))
                 ])
 
                 if (placesRes.status === 'fulfilled') setPlaces(placesRes.value.places || [])

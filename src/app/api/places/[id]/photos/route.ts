@@ -12,6 +12,10 @@ export async function POST(
             return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
         }
 
+        if (!user.emailVerified) {
+            return NextResponse.json({ error: 'Email verification required to add photos' }, { status: 403 })
+        }
+
         const placeId = (await params).id
         const body = await request.json()
         const { photoUrl } = body

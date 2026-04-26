@@ -36,6 +36,10 @@ export async function POST(
             return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
         }
 
+        if (!user.emailVerified) {
+            return NextResponse.json({ error: 'Email verification required to review places' }, { status: 403 })
+        }
+
         const placeId = (await params).id
         const body = await request.json()
         const { rating, comment } = body

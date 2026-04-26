@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTheme } from '@/lib/useTheme'
+import { authClient } from '@/lib/auth-client'
 
 interface User { id: string; name: string; email: string; role: string }
 
@@ -15,7 +16,7 @@ export default function ProfilePage() {
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
-        fetch('/api/auth/me')
+        authClient.getSession().then(() => fetch('/api/auth/me'))
             .then(r => { if (!r.ok) throw new Error(); return r.json() })
             .then(d => {
                 if (d.user) {
