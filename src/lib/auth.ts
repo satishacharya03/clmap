@@ -1,5 +1,6 @@
 import { createNeonAuth } from '@neondatabase/auth/next/server';
 import prisma from './db';
+// Next.js handles .env loading automatically.
 
 // ============ Neon Managed Auth Instance ============
 export const auth = createNeonAuth({
@@ -47,7 +48,10 @@ export async function isAdmin() {
  * Auto-creates the DB record on first login if it doesn't exist yet.
  */
 export async function getOrCreateDbUser(neonUser: any) {
-    if (!neonUser?.email) return null;
+    if (!neonUser?.email) {
+        console.warn("⚠️ getOrCreateDbUser: No email provided in neonUser object");
+        return null;
+    }
 
     try {
         const existing = await prisma.user.findUnique({
@@ -55,7 +59,8 @@ export async function getOrCreateDbUser(neonUser: any) {
         });
 
         if (existing) {
-            // Optional: update emailVerified if it changed
+            console.log(`✅ Found existing user in DB: ${neonUser.email}`);
+            // update emailVerified if it changed
             if (existing.emailVerified !== neonUser.emailVerified) {
                 return await prisma.user.update({
                     where: { email: neonUser.email },
@@ -65,19 +70,22 @@ export async function getOrCreateDbUser(neonUser: any) {
             return existing;
         }
 
+        console.log(`🆕 Provisioning NEW user in DB: ${neonUser.email}`);
         // Auto-provision on first login
-        return await prisma.user.create({
+        const newUser = await prisma.user.create({
             data: {
                 id: neonUser.id,
                 name: neonUser.name ?? neonUser.email.split('@')[0],
                 email: neonUser.email,
                 emailVerified: neonUser.emailVerified ?? false,
-                image: neonUser.image ?? null,
+                image: (neonUser as any).image ?? (neonUser as any).picture ?? null,
                 role: 'USER',
             },
         });
+        console.log(`✨ Successfully created DB user for: ${neonUser.email}`);
+        return newUser;
     } catch (err) {
-        console.error("Error in getOrCreateDbUser:", err);
+        console.error("❌ Error in getOrCreateDbUser:", err);
         return null;
     }
 }

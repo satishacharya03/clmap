@@ -609,10 +609,14 @@ export default function MapPage() {
                                             <button
                                                 onClick={() => {
                                                     if (!currentUser) { router.push('/login?redirect=/map'); return }
+                                                    if (!currentUser.emailVerified) return; // Banner handles the warning
                                                     setAddingPhotoPlaceId(selectedPlace.id)
                                                 }}
-                                                className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
-                                            >+ Add Photo</button>
+                                                disabled={currentUser && !currentUser.emailVerified}
+                                                className={`text-xs font-semibold transition-colors ${currentUser && !currentUser.emailVerified ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-800'}`}
+                                            >
+                                                {currentUser && !currentUser.emailVerified ? 'Verify to Add' : '+ Add Photo'}
+                                            </button>
                                         )}
                                     </div>
                                     
@@ -659,10 +663,14 @@ export default function MapPage() {
                                             <button
                                                 onClick={() => {
                                                     if (!currentUser) { router.push('/login?redirect=/map'); return }
+                                                    if (!currentUser.emailVerified) return;
                                                     setReviewingPlaceId(selectedPlace.id)
                                                 }}
-                                                className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
-                                            >Write a Review</button>
+                                                disabled={currentUser && !currentUser.emailVerified}
+                                                className={`text-xs font-semibold transition-colors ${currentUser && !currentUser.emailVerified ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-800'}`}
+                                            >
+                                                {currentUser && !currentUser.emailVerified ? 'Verify to Review' : 'Write a Review'}
+                                            </button>
                                         )}
                                     </div>
 
