@@ -7,7 +7,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 // Chandigarh University Campus Center
 const CU_CENTER: [number, number] = [76.5766, 30.7699]
 
-const GATE_2_COORDS = { lat: 30.772796, lng: 76.576387 }
+const GATE_2_COORDS = { lat: 30.772587, lng: 76.576408 }
 
 function isWithinCU(lat: number, lng: number) {
     return lat >= 30.7600 && lat <= 30.7800 && lng >= 76.5600 && lng <= 76.5900;
@@ -22,12 +22,65 @@ function calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number
     return (Math.atan2(y, x) * toDeg + 360) % 360;
 }
 
+// Realistic ~65-point polygon tracing CU Chandigarh campus perimeter
 const CU_CAMPUS_BOUNDARY: [number, number][] = [
-    [76.5680, 30.7750],
-    [76.5850, 30.7750],
-    [76.5850, 30.7630],
-    [76.5680, 30.7630],
-    [76.5680, 30.7750],
+    [76.5687, 30.7718],
+    [76.5690, 30.7730],
+    [76.5693, 30.7742],
+    [76.5698, 30.7751],
+    [76.5705, 30.7757],
+    [76.5714, 30.7761],
+    [76.5724, 30.7763],
+    [76.5735, 30.7764],
+    [76.5747, 30.7763],
+    [76.5760, 30.7762],
+    [76.5772, 30.7762],
+    [76.5783, 30.7761],
+    [76.5793, 30.7759],
+    [76.5801, 30.7756],
+    [76.5808, 30.7752],
+    [76.5814, 30.7747],
+    [76.5819, 30.7741],
+    [76.5822, 30.7734],
+    [76.5824, 30.7726],
+    [76.5824, 30.7718],
+    [76.5823, 30.7710],
+    [76.5821, 30.7702],
+    [76.5819, 30.7695],
+    [76.5817, 30.7688],
+    [76.5816, 30.7681],
+    [76.5816, 30.7674],
+    [76.5817, 30.7667],
+    [76.5818, 30.7660],
+    [76.5817, 30.7653],
+    [76.5814, 30.7647],
+    [76.5810, 30.7642],
+    [76.5804, 30.7638],
+    [76.5797, 30.7635],
+    [76.5789, 30.7633],
+    [76.5780, 30.7632],
+    [76.5771, 30.7631],
+    [76.5762, 30.7631],
+    [76.5753, 30.7631],
+    [76.5744, 30.7631],
+    [76.5735, 30.7631],
+    [76.5726, 30.7632],
+    [76.5717, 30.7633],
+    [76.5709, 30.7635],
+    [76.5702, 30.7638],
+    [76.5696, 30.7642],
+    [76.5691, 30.7647],
+    [76.5688, 30.7653],
+    [76.5686, 30.7660],
+    [76.5685, 30.7667],
+    [76.5685, 30.7674],
+    [76.5685, 30.7681],
+    [76.5685, 30.7688],
+    [76.5685, 30.7695],
+    [76.5685, 30.7702],
+    [76.5685, 30.7710],
+    [76.5686, 30.7718],
+    [76.5687, 30.7718],
 ]
 
 const OUTER_BOUNDS: [number, number][] = [
@@ -37,6 +90,7 @@ const OUTER_BOUNDS: [number, number][] = [
     [76.40, 30.60],
     [76.40, 30.90],
 ]
+
 
 const FORCED_BUILDING_HEIGHT = 28
 
@@ -197,6 +251,10 @@ export default function MapLibreCampusMap({
     const [isFirstPerson, setIsFirstPerson] = useState(false)
     const keysPressed = useRef<Set<string>>(new Set())
     const animationRef = useRef<number | null>(null)
+    // Tracks the camera's foot/eye position on the ground (NOT the map center).
+    // The map "center" at pitch=85° is the focal point far ahead of the camera;
+    // eyeRef is where the person is actually standing.
+    const eyeRef = useRef<{ lng: number; lat: number } | null>(null)
     const [mapLoaded, setMapLoaded] = useState(false)
     const [isSatellite, setIsSatellite] = useState(false)
     const layersAdded = useRef(false)
@@ -214,9 +272,12 @@ export default function MapLibreCampusMap({
     }, [])
 
     // ── Setup map layers ────────────────────────────────────────────────────
-    const setupCustomLayers = useCallback((m: maplibregl.Map) => {
+    // satellite param passed explicitly so this function is stable (no closure over isSatellite)
+    const setupCustomLayers = useCallback((m: maplibregl.Map, satellite: boolean) => {
         if (layersAdded.current) return
         layersAdded.current = true
+
+        m.setMaxBounds([[76.5670, 30.7620], [76.5840, 30.7775]])
 
         const style = m.getStyle()
         const sources = style.sources || {}
@@ -236,31 +297,13 @@ export default function MapLibreCampusMap({
         }
 
         for (const layer of layers) {
-            if (layer.id.includes('building') && (layer.type === 'fill')) {
+            if (layer.id.includes('building') && layer.type === 'fill') {
                 try { m.removeLayer(layer.id) } catch (e) { }
             }
         }
 
-        if (!m.getSource('campus-mask')) {
-            m.addSource('campus-mask', {
-                type: 'geojson',
-                data: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [OUTER_BOUNDS, CU_CAMPUS_BOUNDARY] } }
-            })
-        }
-        if (!m.getLayer('campus-mask-layer')) {
-            m.addLayer({ id: 'campus-mask-layer', type: 'fill', source: 'campus-mask', paint: { 'fill-color': '#0f172a', 'fill-opacity': isSatellite ? 0 : 0.88 } })
-        }
-        if (!m.getSource('campus-boundary')) {
-            m.addSource('campus-boundary', {
-                type: 'geojson',
-                data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: CU_CAMPUS_BOUNDARY } }
-            })
-        }
-        if (!m.getLayer('campus-boundary-glow')) {
-            m.addLayer({ id: 'campus-boundary-glow', type: 'line', source: 'campus-boundary', paint: { 'line-color': '#6366f1', 'line-width': 8, 'line-opacity': 0.4, 'line-blur': 4 } })
-            m.addLayer({ id: 'campus-boundary-line', type: 'line', source: 'campus-boundary', paint: { 'line-color': '#818cf8', 'line-width': 2.5, 'line-opacity': 0.95 } })
-        }
-        if (!isSatellite) {
+        // ── Roads / Parks / Water (street mode only) ──
+        if (!satellite) {
             try {
                 if (!m.getLayer('campus-roads-border')) {
                     m.addLayer({ id: 'campus-roads-border', source: vectorSource, 'source-layer': 'transportation', type: 'line', minzoom: 12, paint: { 'line-color': '#94a3b8', 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 12, 1.5, 14, 4, 16, 10, 18, 20, 20, 36], 'line-opacity': 0.7 } })
@@ -271,6 +314,8 @@ export default function MapLibreCampusMap({
             try { if (!m.getLayer('campus-parks')) m.addLayer({ id: 'campus-parks', source: vectorSource, 'source-layer': 'landuse', type: 'fill', filter: ['in', ['get', 'class'], ['literal', ['park', 'grass', 'garden', 'meadow', 'recreation_ground']]], paint: { 'fill-color': '#4ade80', 'fill-opacity': 0.25 } }) } catch (e) { }
             try { if (!m.getLayer('campus-water')) m.addLayer({ id: 'campus-water', source: vectorSource, 'source-layer': 'water', type: 'fill', paint: { 'fill-color': '#38bdf8', 'fill-opacity': 0.4 } }) } catch (e) { }
         }
+
+        // ── 3D Buildings ──
         try {
             if (!m.getLayer('3d-buildings')) {
                 m.addLayer({
@@ -280,27 +325,43 @@ export default function MapLibreCampusMap({
                         'fill-extrusion-color': ['case', ['has', 'colour'], ['get', 'colour'], ['==', ['get', 'building'], 'university'], '#3b82f6', ['==', ['get', 'building'], 'college'], '#8b5cf6', ['==', ['get', 'building'], 'school'], '#22c55e', ['==', ['get', 'building'], 'hospital'], '#ef4444', ['==', ['get', 'building'], 'hotel'], '#f59e0b', ['==', ['get', 'building'], 'commercial'], '#06b6d4', ['==', ['get', 'building'], 'retail'], '#f97316', ['==', ['get', 'building'], 'residential'], '#64748b', '#6366f1'],
                         'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 14, 0, 15, ['max', FORCED_BUILDING_HEIGHT, ['coalesce', ['get', 'render_height'], ['*', ['coalesce', ['get', 'building:levels'], 7], 4], ['get', 'height'], FORCED_BUILDING_HEIGHT]]],
                         'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-                        'fill-extrusion-opacity': isSatellite ? 0.75 : 0.9,
+                        'fill-extrusion-opacity': satellite ? 0.75 : 0.9,
                     }
                 })
             }
         } catch (e) { console.error('3D buildings error:', e) }
         try { if (!m.getLayer('building-outlines')) m.addLayer({ id: 'building-outlines', source: vectorSource, 'source-layer': 'building', type: 'line', minzoom: 15, paint: { 'line-color': '#a5b4fc', 'line-width': 1, 'line-opacity': 0.5 } }) } catch (e) { }
 
-        // ── GeoJSON source + Symbol layer for place pins ──────────────────
-        // This is the key fix: symbol layers are rendered in WebGL and share
-        // the exact 3D projection with buildings — zero drift on pitch/drag.
-        if (!m.getSource('places-source')) {
-            m.addSource('places-source', {
+        // ── Campus MASK (to 'delete' external area completely) ──
+        if (!m.getSource('campus-mask')) {
+            m.addSource('campus-mask', {
                 type: 'geojson',
-                data: { type: 'FeatureCollection', features: [] },
+                data: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [OUTER_BOUNDS, CU_CAMPUS_BOUNDARY] } }
             })
+        }
+        if (!m.getLayer('campus-mask-layer')) {
+            m.addLayer({ id: 'campus-mask-layer', type: 'fill', source: 'campus-mask', paint: { 'fill-color': '#0f172a', 'fill-opacity': 1 } })
+        }
+
+        // ── Campus boundary glow/line ──
+        if (!m.getSource('campus-boundary')) {
+            m.addSource('campus-boundary', {
+                type: 'geojson',
+                data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: CU_CAMPUS_BOUNDARY } }
+            })
+        }
+        if (!m.getLayer('campus-boundary-glow')) {
+            m.addLayer({ id: 'campus-boundary-glow', type: 'line', source: 'campus-boundary', paint: { 'line-color': '#6366f1', 'line-width': 8, 'line-opacity': 0.4, 'line-blur': 4 } })
+            m.addLayer({ id: 'campus-boundary-line', type: 'line', source: 'campus-boundary', paint: { 'line-color': '#818cf8', 'line-width': 2.5, 'line-opacity': 0.95 } })
+        }
+
+        // ── GeoJSON source + Symbol layer for place pins ──
+        if (!m.getSource('places-source')) {
+            m.addSource('places-source', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
         }
         if (!m.getLayer('places-layer')) {
             m.addLayer({
-                id: 'places-layer',
-                type: 'symbol',
-                source: 'places-source',
+                id: 'places-layer', type: 'symbol', source: 'places-source',
                 layout: {
                     'icon-image': ['get', 'iconId'],
                     'icon-anchor': 'bottom',
@@ -312,31 +373,19 @@ export default function MapLibreCampusMap({
             })
         }
 
-        // Click on a place pin
         m.on('click', 'places-layer', (e) => {
             if (!e.features?.length) return
             const id = e.features[0].properties?.id
             const place = placesRef.current.find(p => p.id === id)
             if (!place) return
             onPlaceClickRef.current?.(place)
-            m.flyTo({
-                center: [place.longitude!, place.latitude!],
-                zoom: Math.max(m.getZoom(), 17),
-                duration: 800,
-                essential: true,
-            })
+            m.flyTo({ center: [place.longitude!, place.latitude!], zoom: Math.max(m.getZoom(), 17), duration: 800, essential: true })
         })
-
-        // Pointer cursor on hover
-        m.on('mouseenter', 'places-layer', () => {
-            m.getCanvas().style.cursor = 'pointer'
-        })
-        m.on('mouseleave', 'places-layer', () => {
-            if (!pinDropMode) m.getCanvas().style.cursor = ''
-        })
+        m.on('mouseenter', 'places-layer', () => { m.getCanvas().style.cursor = 'pointer' })
+        m.on('mouseleave', 'places-layer', () => { if (!pinDropMode) m.getCanvas().style.cursor = '' })
 
         setMapLoaded(true)
-    }, [isSatellite]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Initialize map
     useEffect(() => {
@@ -346,28 +395,29 @@ export default function MapLibreCampusMap({
             style: 'https://tiles.openfreemap.org/styles/liberty',
             center: CU_CENTER,
             zoom: 16,
-            minZoom: 14,
+            minZoom: 15.2,
             maxZoom: 20,
             pitch: 55,
             bearing: 180,
             maxPitch: 85,
             dragRotate: true,
+            attributionControl: false,
             maxBounds: [
-                [76.560, 30.755],
-                [76.595, 30.785]
+                [76.5670, 30.7620],
+                [76.5840, 30.7775]
             ],
         })
         map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), 'bottom-right')
-        
-        const gc = new maplibregl.GeolocateControl({ 
-            positionOptions: { enableHighAccuracy: true, maximumAge: 0, timeout: 27000 }, 
-            trackUserLocation: true, 
+
+        const gc = new maplibregl.GeolocateControl({
+            positionOptions: { enableHighAccuracy: true, maximumAge: 0, timeout: 27000 },
+            trackUserLocation: true,
             showAccuracyCircle: true,
-            showUserLocation: true 
+            showUserLocation: true
         })
         geolocateControlRef.current = gc
         map.current.addControl(gc, 'bottom-right')
-        
+
         gc.on('geolocate', (e: any) => {
             let lat = e.coords.latitude;
             let lng = e.coords.longitude;
@@ -384,7 +434,10 @@ export default function MapLibreCampusMap({
         })
         map.current.on('load', () => {
             if (!map.current) return
-            setupCustomLayers(map.current)
+            // Lock minZoom to current zoom so user can't zoom out further
+            const loadedZoom = map.current.getZoom()
+            map.current.setMinZoom(loadedZoom)
+            setupCustomLayers(map.current, false)
         })
         return () => { if (map.current) { map.current.remove(); map.current = null } }
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -397,6 +450,7 @@ export default function MapLibreCampusMap({
         layersAdded.current = false
         setMapLoaded(false)
         REGISTERED_IMAGES.clear()
+        const currentMinZoom = map.current.getMinZoom()
         if (next) {
             map.current.setStyle({
                 version: 8,
@@ -407,9 +461,14 @@ export default function MapLibreCampusMap({
         } else {
             map.current.setStyle('https://tiles.openfreemap.org/styles/liberty')
         }
+        const afterStyle = () => {
+            if (!map.current) return
+            map.current.setMinZoom(currentMinZoom)
+            setupCustomLayers(map.current, next)
+        }
         map.current.once('styledata', () => {
-            if (map.current?.isStyleLoaded()) setupCustomLayers(map.current)
-            else map.current?.once('idle', () => { if (map.current) setupCustomLayers(map.current) })
+            if (map.current?.isStyleLoaded()) afterStyle()
+            else map.current?.once('idle', afterStyle)
         })
     }, [isSatellite, setupCustomLayers])
 
@@ -467,7 +526,7 @@ export default function MapLibreCampusMap({
                 },
             })),
         }
-        ;(m.getSource('places-source') as maplibregl.GeoJSONSource).setData(geojson)
+            ; (m.getSource('places-source') as maplibregl.GeoJSONSource).setData(geojson)
     }, [places, selectedCategoryIds, mapLoaded, selectedPlace, getCategoryColor])
 
     // Fly to selected place
@@ -517,21 +576,72 @@ export default function MapLibreCampusMap({
         if (match?.latitude && match?.longitude) map.current.flyTo({ center: [match.longitude, match.latitude], zoom: 18, pitch: 60, duration: 1200 })
     }, [searchQuery, places])
 
-    // Street view keyboard movement
+    // ── First-person physics walking ────────────────────────────────────────
+    // Human walking ~1.4 m/s. At lat 30°: 1° ≈ 111111m → 1.4m/s = 0.0000126°/s
+    // At 60fps that is 0.00000021°/frame. WALK_MAX is that cap.
+    const WALK_ACCEL = 0.000001  // acceleration per frame
+    const WALK_MAX = 0.000011  // ~1.4 m/s cap
+    // At 60fps that is 0.00000021°/frame. WALK_MAX is that cap.
+    const SEEK_ACCEL = 0.000001  // acceleration per frame
+    const SEEK_MAX = 0.000011  // ~1.4 m/s cap
+    const WALK_FRICTION = 0.80
+    const ROT_SPEED = 0.2        // degrees per frame for Q/E keys
+
+    const velRef = useRef({ fwd: 0, side: 0, rot: 0 })
+    // offsetRef: distance (degrees) from camera eye to map center along the
+    // bearing direction. Computed ONCE on entry (after easeTo settles) so
+    // all frames use the same value — prevents drift/orbit from float errors.
+    const offsetRef = useRef(0)
+
     const moveCamera = useCallback(() => {
-        if (!map.current || !isFirstPerson) return
-        const speed = 0.000035, rotateSpeed = 1.0
-        let moved = false
-        const center = map.current.getCenter()
-        const bearing = map.current.getBearing()
-        const bearingRad = (bearing * Math.PI) / 180
-        if (keysPressed.current.has('w') || keysPressed.current.has('arrowup')) { center.lng += Math.sin(bearingRad) * speed; center.lat += Math.cos(bearingRad) * speed; moved = true }
-        if (keysPressed.current.has('s') || keysPressed.current.has('arrowdown')) { center.lng -= Math.sin(bearingRad) * speed; center.lat -= Math.cos(bearingRad) * speed; moved = true }
-        if (keysPressed.current.has('a')) { center.lng -= Math.cos(bearingRad) * speed; center.lat += Math.sin(bearingRad) * speed; moved = true }
-        if (keysPressed.current.has('d')) { center.lng += Math.cos(bearingRad) * speed; center.lat -= Math.sin(bearingRad) * speed; moved = true }
-        if (keysPressed.current.has('arrowleft') || keysPressed.current.has('q')) { map.current.setBearing(bearing - rotateSpeed); moved = true }
-        if (keysPressed.current.has('arrowright') || keysPressed.current.has('e')) { map.current.setBearing(bearing + rotateSpeed); moved = true }
-        if (moved) map.current.setCenter(center)
+        if (!map.current || !isFirstPerson || !eyeRef.current) return
+        const keys = keysPressed.current
+        const vel = velRef.current
+        const m = map.current
+        const off = offsetRef.current
+        const eye = eyeRef.current
+
+        // Accumulate velocity
+        if (keys.has('w') || keys.has('arrowup')) vel.fwd = Math.min(vel.fwd + WALK_ACCEL, WALK_MAX)
+        if (keys.has('s') || keys.has('arrowdown')) vel.fwd = Math.max(vel.fwd - WALK_ACCEL, -WALK_MAX)
+        if (keys.has('a')) vel.side = Math.max(vel.side - SEEK_ACCEL, -SEEK_MAX)
+        if (keys.has('d')) vel.side = Math.min(vel.side + SEEK_ACCEL, SEEK_MAX)
+        if (keys.has('arrowleft') || keys.has('q')) vel.rot = Math.max(vel.rot - ROT_SPEED, -ROT_SPEED * 2)
+        if (keys.has('arrowright') || keys.has('e')) vel.rot = Math.min(vel.rot + ROT_SPEED, ROT_SPEED * 2)
+
+        // Friction
+        vel.fwd *= WALK_FRICTION
+        vel.side *= WALK_FRICTION
+        vel.rot *= WALK_FRICTION
+
+        // Snap to zero
+        if (Math.abs(vel.fwd) < 1e-9) vel.fwd = 0
+        if (Math.abs(vel.side) < 1e-9) vel.side = 0
+        if (Math.abs(vel.rot) < 0.01) vel.rot = 0
+
+        if (vel.fwd === 0 && vel.side === 0 && vel.rot === 0) {
+            animationRef.current = requestAnimationFrame(moveCamera)
+            return
+        }
+
+        const newBearing = m.getBearing() + vel.rot
+        const newBearingRad = (newBearing * Math.PI) / 180
+
+        // Move eye for walk / strafe
+        eye.lng += Math.sin(newBearingRad) * vel.fwd + Math.cos(newBearingRad) * vel.side
+        eye.lat += Math.cos(newBearingRad) * vel.fwd - Math.sin(newBearingRad) * vel.side
+
+        // center = eye + forward_direction * offset  (fixed offset, no recompute)
+        // Rotation: eye fixed, center sweeps → person turns on the spot ✓
+        // Walking:  eye moves, center follows        → person walks forward ✓
+        m.jumpTo({
+            center: {
+                lng: eye.lng + Math.sin(newBearingRad) * off,
+                lat: eye.lat + Math.cos(newBearingRad) * off,
+            },
+            bearing: newBearing,
+        })
+
         animationRef.current = requestAnimationFrame(moveCamera)
     }, [isFirstPerson])
 
@@ -550,14 +660,91 @@ export default function MapLibreCampusMap({
     }, [pinDropMode])
 
     useEffect(() => {
+        const m = map.current
+        if (!m) return
         if (isFirstPerson) {
-            map.current?.easeTo({ pitch: 85, zoom: 19, duration: 1000 })
-            animationRef.current = requestAnimationFrame(moveCamera)
+            velRef.current = { fwd: 0, side: 0, rot: 0 }
+            eyeRef.current = null
+            m.scrollZoom.disable()
+            m.dragPan.disable()   // disable default pan; we handle mouse ourselves
+            m.easeTo({ pitch: 85, zoom: 19, duration: 800 })
+
+            // After easeTo settles: initialise eye + offset ONCE so every frame
+            // uses the same value (prevents float drift that causes orbit)
+            const t = setTimeout(() => {
+                if (!map.current) return
+                const c = map.current.getCenter()
+                const b = map.current.getBearing()
+                const bRad = (b * Math.PI) / 180
+                // ground distance (°) from eye to focal center at pitch=85, zoom=19
+                // fovRad=36.87°, tileSize=512px for openfreemap
+                const fovRad = (36.87 * Math.PI) / 180
+                const canvasH = map.current.getCanvas().clientHeight || 800
+                const focalPx = (canvasH / 2) / Math.tan(fovRad / 2)
+                const mPerPx = (2 * Math.PI * 6378137) / (512 * Math.pow(2, map.current.getZoom()))
+                const altM = focalPx * mPerPx
+                const distM = altM * Math.tan((map.current.getPitch() * Math.PI) / 180)
+                const off = distM / 111111
+                offsetRef.current = off
+                eyeRef.current = {
+                    lng: c.lng - Math.sin(bRad) * off,
+                    lat: c.lat - Math.cos(bRad) * off,
+                }
+                if (animationRef.current) cancelAnimationFrame(animationRef.current)
+                animationRef.current = requestAnimationFrame(moveCamera)
+            }, 850)
+
+            // Mouse drag = turn in place (change bearing, eye stays fixed)
+            let dragging = false
+            let lastX = 0
+            const canvas = m.getCanvas()
+            const onDown = (e: MouseEvent | TouchEvent) => {
+                dragging = true
+                lastX = 'touches' in e ? e.touches[0].clientX : e.clientX
+            }
+            const onMove = (e: MouseEvent | TouchEvent) => {
+                if (!dragging || !eyeRef.current || !map.current) return
+                const x = 'touches' in e ? e.touches[0].clientX : e.clientX
+                const dx = x - lastX
+                lastX = x
+                const newBearing = map.current.getBearing() + dx * 0.3
+                const newBearingRad = (newBearing * Math.PI) / 180
+                const off = offsetRef.current
+                const eye = eyeRef.current
+                map.current.jumpTo({
+                    bearing: newBearing,
+                    center: {
+                        lng: eye.lng + Math.sin(newBearingRad) * off,
+                        lat: eye.lat + Math.cos(newBearingRad) * off,
+                    },
+                })
+            }
+            const onUp = () => { dragging = false }
+            canvas.addEventListener('mousedown', onDown)
+            canvas.addEventListener('mousemove', onMove as any)
+            canvas.addEventListener('mouseup', onUp)
+            canvas.addEventListener('touchstart', onDown as any, { passive: true })
+            canvas.addEventListener('touchmove', onMove as any, { passive: true })
+            canvas.addEventListener('touchend', onUp)
+
+            return () => {
+                clearTimeout(t)
+                if (animationRef.current) cancelAnimationFrame(animationRef.current)
+                canvas.removeEventListener('mousedown', onDown)
+                canvas.removeEventListener('mousemove', onMove as any)
+                canvas.removeEventListener('mouseup', onUp)
+                canvas.removeEventListener('touchstart', onDown as any)
+                canvas.removeEventListener('touchmove', onMove as any)
+                canvas.removeEventListener('touchend', onUp)
+            }
         } else {
-            map.current?.easeTo({ pitch: 55, zoom: 16, duration: 1000 })
-            if (animationRef.current) cancelAnimationFrame(animationRef.current)
+            eyeRef.current = null
+            offsetRef.current = 0
+            if (animationRef.current) { cancelAnimationFrame(animationRef.current); animationRef.current = null }
+            m.easeTo({ pitch: 55, zoom: 16, duration: 800 })
+            m.scrollZoom.enable()
+            m.dragPan.enable()
         }
-        return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current) }
     }, [isFirstPerson, moveCamera])
 
     const handleRemoveRoute = useCallback(() => {
@@ -592,9 +779,9 @@ export default function MapLibreCampusMap({
                 const route = data.routes[0].geometry
                 const routeDist = data.routes[0].distance
                 const routeTime = data.routes[0].duration
-                
+
                 setNavStats({ dist: routeDist, time: routeTime })
-                
+
                 // OSRM snaps to the nearest mapped road, which can be ~100m away on a campus. 
                 // We manually prepend the user's EXACT raw GPS coordinate, and append the EXACT 
                 // building pin coordinate to the line so there is zero gap or misplacement shown.
@@ -618,31 +805,31 @@ export default function MapLibreCampusMap({
                 } else {
                     map.current.flyTo({ center: coords[0], zoom: 17, pitch: 50, duration: 800, essential: true })
                 }
-                
+
                 if (!map.current.getSource('route-main')) {
                     map.current.addSource('route-main', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
                     map.current.addSource('route-walk', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-                    
+
                     map.current.addLayer({ id: 'route-walk-outline', type: 'line', source: 'route-walk', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 0, 'line-opacity': 0 } })
                     map.current.addLayer({ id: 'route-walk-line', type: 'line', source: 'route-walk', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 2.5, 'line-dasharray': [0.1, 2.5], 'line-opacity': 0.8 } })
 
                     map.current.addLayer({ id: 'route-main-outline', type: 'line', source: 'route-main', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 8, 'line-opacity': 0.9 } })
                     map.current.addLayer({ id: 'route-main-line', type: 'line', source: 'route-main', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 1 } })
                 }
-                
+
                 // 1. Animate line drawing
                 const totalPoints = coords.length
                 const routeMainSource = map.current.getSource('route-main') as maplibregl.GeoJSONSource
                 const routeWalkSource = map.current.getSource('route-walk') as maplibregl.GeoJSONSource
-                
+
                 const drawDuration = 500
                 const startDrawTime = performance.now()
-                
+
                 const animateLine = (now: number) => {
                     const progress = Math.max(0, Math.min((now - startDrawTime) / drawDuration, 1))
                     const currentFloatIndex = progress * (totalPoints - 1)
                     const currentIntIndex = Math.floor(currentFloatIndex)
-                    
+
                     const currentCoords = coords.slice(0, currentIntIndex + 1)
                     if (currentIntIndex < totalPoints - 1) {
                         const ratio = currentFloatIndex - currentIntIndex
@@ -653,57 +840,46 @@ export default function MapLibreCampusMap({
                             p1[1] + (p2[1] - p1[1]) * ratio
                         ])
                     }
-                    
+
                     const rdStart = 1;
                     const rdEnd = totalPoints - 2;
-                    
+
                     const w1 = currentCoords.slice(0, 2);
                     const rd = currentCoords.length > rdStart ? currentCoords.slice(rdStart, Math.min(currentCoords.length, rdEnd + 1)) : [];
                     const w2 = currentCoords.length > rdEnd ? currentCoords.slice(rdEnd) : [];
-                    
+
                     const walkFeatures: any[] = []
                     if (w1.length >= 2) walkFeatures.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: w1 } })
                     if (w2.length >= 2) walkFeatures.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: w2 } })
-                    
+
                     routeWalkSource.setData({ type: 'FeatureCollection', features: walkFeatures })
                     routeMainSource.setData({ type: 'FeatureCollection', features: rd.length >= 2 ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: rd } }] : [] })
-                    
-                        if (progress < 1) {
-                            lineAnimRef.current = requestAnimationFrame(animateLine)
-                        } else {
-                            // 2. Start Real GPS Tracking using MapLibre's built-in 'perfect' blue dot
-                            setNavStatus('walking')
-                            
-                            // Trigger MapLibre's native GeolocateControl which perfectly 
-                            // handles the blue dot, accuracy circle, and camera tracking!
-                            if (geolocateControlRef.current && geolocateControlRef.current._watchState === 'OFF') {
-                                geolocateControlRef.current.trigger()
-                            }
+
+                    if (progress < 1) {
+                        lineAnimRef.current = requestAnimationFrame(animateLine)
+                    } else {
+                        // 2. Start Real GPS Tracking using MapLibre's built-in 'perfect' blue dot
+                        setNavStatus('walking')
+
+                        // Trigger MapLibre's native GeolocateControl which perfectly 
+                        // handles the blue dot, accuracy circle, and camera tracking!
+                        if (geolocateControlRef.current && geolocateControlRef.current._watchState === 'OFF') {
+                            geolocateControlRef.current.trigger()
                         }
                     }
-                    lineAnimRef.current = requestAnimationFrame(animateLine)
+                }
+                lineAnimRef.current = requestAnimationFrame(animateLine)
             }
         } catch (err) { console.error('Routing error', err); if (animate) setNavStatus('error') }
     }, [stopWalker])
 
+    // Clear route when place is deselected, but do NOT auto-draw on select.
     useEffect(() => {
-        if (!selectedPlace?.latitude || !selectedPlace?.longitude) { handleRemoveRoute(); stopWalker(); return }
-        const draw = () => drawRoute(selectedPlace.latitude!, selectedPlace.longitude!, false)
-        if (userLocation.current) draw()
-        else navigator.geolocation.getCurrentPosition(pos => {
-            let lat = pos.coords.latitude;
-            let lng = pos.coords.longitude;
-            if (!isWithinCU(lat, lng)) {
-                lat = GATE_2_COORDS.lat;
-                lng = GATE_2_COORDS.lng;
-            }
-            userLocation.current = { lat, lng };
-            draw() 
-        }, () => { }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 })
-        const onLoc = () => draw()
-        window.addEventListener('userLocationUpdate', onLoc)
-        return () => window.removeEventListener('userLocationUpdate', onLoc)
-    }, [selectedPlace, drawRoute, handleRemoveRoute, stopWalker])
+        if (!selectedPlace?.latitude || !selectedPlace?.longitude) {
+            handleRemoveRoute()
+            stopWalker()
+        }
+    }, [selectedPlace, handleRemoveRoute, stopWalker])
 
     useEffect(() => {
         if (!navigateToPlace?.latitude || !navigateToPlace?.longitude) return
@@ -718,7 +894,7 @@ export default function MapLibreCampusMap({
                 lng = GATE_2_COORDS.lng;
             }
             userLocation.current = { lat, lng };
-            go() 
+            go()
         }, () => setNavStatus('error'), { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 })
     }, [navigateToPlace, drawRoute])
 

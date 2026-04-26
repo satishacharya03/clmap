@@ -1,8 +1,40 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ─── CampusNav theme tokens ─── */
+:root, [data-theme="light"] {
+  --cn-bg: #f3f4f6;
+  --cn-surface: #ffffff;
+  --cn-surface-2: #f9fafb;
+  --cn-border: #e5e7eb;
+  --cn-border-soft: #f3f4f6;
+  --cn-text-1: #111827;
+  --cn-text-2: #4b5563;
+  --cn-text-3: #9ca3af;
+  --cn-nav-bg: rgba(255,255,255,0.95);
+  --cn-nav-border: #e5e7eb;
+  --cn-nav-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  --cn-toggle-bg: #e5e7eb;
+  --cn-toggle-text: #374151;
+  --background: #f3f4f6;
+  --foreground: #111827;
+}
+
+[data-theme="dark"] {
+  --cn-bg: #0f172a;
+  --cn-surface: rgba(255,255,255,0.05);
+  --cn-surface-2: rgba(255,255,255,0.03);
+  --cn-border: rgba(255,255,255,0.09);
+  --cn-border-soft: rgba(255,255,255,0.05);
+  --cn-text-1: #f1f5f9;
+  --cn-text-2: rgba(255,255,255,0.6);
+  --cn-text-3: rgba(255,255,255,0.3);
+  --cn-nav-bg: rgba(15,23,42,0.92);
+  --cn-nav-border: rgba(255,255,255,0.08);
+  --cn-nav-shadow: 0 1px 8px rgba(0,0,0,0.4);
+  --cn-toggle-bg: rgba(255,255,255,0.1);
+  --cn-toggle-text: rgba(255,255,255,0.85);
+  --background: #0f172a;
+  --foreground: #f1f5f9;
 }
 
 body {

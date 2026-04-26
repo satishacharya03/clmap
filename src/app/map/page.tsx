@@ -7,6 +7,9 @@ import { useRouter } from 'next/navigation'
 import type { Place, Category } from '@/components/MapLibreCampusMap'
 import ImageUpload from '@/components/ImageUpload'
 
+// CACHE BUSTER: Force Next.js and browser to invalidate stale bundle
+const CACHE_BUSTER = Date.now();
+
 const MapLibreCampusMap = dynamic(() => import('@/components/MapLibreCampusMap'), {
     ssr: false,
     loading: () => (
@@ -37,6 +40,7 @@ const COMMON_EMOJIS = ['📍', '🏫', '📚', '🍕', '☕', '🏋️', '🅿�
     '🎭', '🖥️', '🔬', '⚗️', '🎨', '🏊', '⚽', '🛒', '🏦', '📬']
 
 export default function MapPage() {
+    const [mounted, setMounted] = useState(false)
     const [places, setPlaces] = useState<Place[]>([])
     const [categories, setCategories] = useState<Category[]>([])
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
@@ -76,6 +80,7 @@ export default function MapPage() {
     const [addingPhotoPlaceId, setAddingPhotoPlaceId] = useState<string | null>(null)
     const [newPhotoBase64, setNewPhotoBase64] = useState<string | null>(null)
     const [isSubmittingPhoto, setIsSubmittingPhoto] = useState(false)
+    const [fullscreenPhotoUrl, setFullscreenPhotoUrl] = useState<string | null>(null)
 
     const catColorMap = useRef<Map<string, string>>(new Map())
     const searchTimeout = useRef<NodeJS.Timeout | null>(null)
@@ -325,6 +330,12 @@ export default function MapPage() {
 
     const placesWithCoords = places.filter(p => p.latitude && p.longitude)
 
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    if (!mounted) return null
+
     return (
         <div className="h-screen w-screen overflow-hidden relative" style={{ background: '#0f172a' }}>
             {/* Full Screen Map */}
@@ -546,8 +557,14 @@ export default function MapPage() {
                             <div className="mb-6">
                                 <div className="flex items-center justify-between mb-3">
                                     <h3 className="font-bold text-gray-900 text-sm">Photos</h3>
-                                    {currentUser && addingPhotoPlaceId !== selectedPlace.id && (
-                                        <button onClick={() => setAddingPhotoPlaceId(selectedPlace.id)} className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors">+ Add Photo</button>
+                                    {addingPhotoPlaceId !== selectedPlace.id && (
+                                        <button
+                                            onClick={() => {
+                                                if (!currentUser) { router.push('/login?redirect=/map'); return }
+                                                setAddingPhotoPlaceId(selectedPlace.id)
+                                            }}
+                                            className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
+                                        >+ Add Photo</button>
                                     )}
                                 </div>
                                 
@@ -564,7 +581,11 @@ export default function MapPage() {
                                 {selectedPlace.photos && selectedPlace.photos.length > 0 ? (
                                     <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide -mx-5 px-5">
                                         {selectedPlace.photos.map((photo, idx) => (
-                                            <div key={idx} className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100/50">
+                                            <div
+                                                key={idx}
+                                                className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100/50 cursor-pointer hover:scale-105 transition-transform"
+                                                onClick={() => setFullscreenPhotoUrl(photo.photoUrl)}
+                                            >
                                                 <img src={photo.photoUrl} alt="Location" className="w-full h-full object-cover select-none" />
                                             </div>
                                         ))}
@@ -586,8 +607,14 @@ export default function MapPage() {
                                             </span>
                                         )}
                                     </div>
-                                    {currentUser && reviewingPlaceId !== selectedPlace.id && (
-                                        <button onClick={() => setReviewingPlaceId(selectedPlace.id)} className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors">Write a Review</button>
+                                    {reviewingPlaceId !== selectedPlace.id && (
+                                        <button
+                                            onClick={() => {
+                                                if (!currentUser) { router.push('/login?redirect=/map'); return }
+                                                setReviewingPlaceId(selectedPlace.id)
+                                            }}
+                                            className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
+                                        >Write a Review</button>
                                     )}
                                 </div>
 
@@ -875,21 +902,37 @@ export default function MapPage() {
                 </div>
             )}
 
-            {/* ─── FLOATING ADD BUTTON ─── */}
+            {/* ─── FLOATING BOTTOM-LEFT BUTTONS ─── */}
             {addMode === 'idle' && (
-                <button
-                    onClick={enterPinDrop}
-                    className="absolute right-5 bottom-8 z-30 w-14 h-14 flex items-center justify-center rounded-full text-white text-2xl font-light transition-all hover:scale-110 active:scale-95"
-                    style={{
-                        background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                        boxShadow: '0 8px 32px rgba(99,102,241,0.55), 0 2px 8px rgba(0,0,0,0.2)'
-                    }}
-                    title="Add new place"
-                >
-                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                </button>
+                <div className="absolute left-4 bottom-8 z-30 flex items-center gap-2">
+                    {/* Add Place — icon-only + button */}
+                    <button
+                        onClick={enterPinDrop}
+                        className="w-11 h-11 flex items-center justify-center rounded-full text-white font-bold transition-all hover:scale-110 active:scale-95"
+                        style={{
+                            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                            boxShadow: '0 4px 18px rgba(99,102,241,0.55)'
+                        }}
+                        title="Add new place"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                        </svg>
+                    </button>
+                    {/* About link */}
+                    <Link
+                        href="/about"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-full text-white text-xs font-semibold transition-all hover:scale-105 active:scale-95 backdrop-blur-md"
+                        style={{
+                            background: 'rgba(15,23,42,0.70)',
+                            border: '1px solid rgba(99,102,241,0.3)',
+                            boxShadow: '0 2px 12px rgba(0,0,0,0.25)'
+                        }}
+                    >
+                        <span className="text-[11px]">ℹ️</span>
+                        <span>About</span>
+                    </Link>
+                </div>
             )}
 
             {/* Cancel pin drop button */}
@@ -917,6 +960,32 @@ export default function MapPage() {
                         <p className="font-medium">No places pinned yet</p>
                         <p className="text-white/50 text-xs mt-0.5">Tap + to add your first location</p>
                     </div>
+                </div>
+            )}
+
+            {/* ─── FULLSCREEN PHOTO LIGHTBOX ─── */}
+            {fullscreenPhotoUrl && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center"
+                    style={{ background: 'rgba(0,0,0,0.96)' }}
+                    onClick={() => setFullscreenPhotoUrl(null)}
+                >
+                    <div className="relative inline-flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                        <img
+                            src={fullscreenPhotoUrl}
+                            alt="Full view"
+                            className="h-[50vh] md:h-[65vh] w-auto max-w-[95vw] rounded-2xl shadow-2xl object-contain select-none"
+                            style={{ border: '1px solid rgba(255,255,255,0.15)' }}
+                        />
+                        <button
+                            onClick={() => setFullscreenPhotoUrl(null)}
+                            className="absolute -top-4 -right-4 w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-xl transition-all hover:scale-110 z-[110]"
+                            style={{ background: 'rgba(239,68,68,0.95)', boxShadow: '0 4px 20px rgba(239,68,68,0.6)' }}
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <p className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/30 text-[10px] uppercase tracking-widest pointer-events-none">Click anywhere outside to close</p>
                 </div>
             )}
 

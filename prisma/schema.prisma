@@ -243,3 +243,14 @@ model LiveLocation {
 
   @@map("live_locations")
 }
+
+model Feedback {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  message   String
+  rating    Int      @default(5)
+  createdAt DateTime @default(now())
+
+  @@map("feedback")
+}
