@@ -3,7 +3,7 @@
 import { useState, FormEvent, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { signIn, emailOtp, authClient } from '@/lib/auth-client'
+import { signIn, authClient } from '@/lib/auth-client'
 
 // ─── Google Icon ─────────────────────────────────────────────────────────────
 function GoogleIcon() {
@@ -88,44 +88,6 @@ function LoginForm() {
             })
         } catch {
             setError('Google sign-in failed. Please try again.')
-            setIsLoading(false)
-        }
-    }
-
-    // ── Email OTP verification ──────────────────────────────────────────────
-    const handleVerifyOtp = async (e: FormEvent) => {
-        e.preventDefault()
-        setError(''); setInfo('')
-        setIsLoading(true)
-        try {
-            // Better Auth verifyEmail handles the OTP code verification
-            const { error: authError } = await emailOtp.verifyEmail({
-                email,
-                otp,
-            })
-            if (authError) throw new Error(authError.message || 'Invalid or expired code')
-            
-            setInfo('Email verified! You can now sign in.')
-            setTab('login')
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Verification failed')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    // ── Resend verification email ────────────────────────────────────────────
-    const handleResendVerification = async () => {
-        if (!email) { setError('Please enter your email first.'); return }
-        setError(''); setInfo('')
-        setIsLoading(true)
-        try {
-            const { error } = await emailOtp.sendVerificationOtp({ email, type: 'email-verification' });
-            if (error) throw error;
-            setInfo('A new verification code has been sent to your email.');
-        } catch (err: any) {
-            setError(err.message || 'Failed to resend code. Try again later.');
-        } finally {
             setIsLoading(false)
         }
     }

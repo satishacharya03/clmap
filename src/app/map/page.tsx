@@ -613,7 +613,7 @@ export default function MapPage() {
                                                     if (!currentUser.emailVerified) return; // Banner handles the warning
                                                     setAddingPhotoPlaceId(selectedPlace.id)
                                                 }}
-                                                disabled={currentUser && !currentUser.emailVerified}
+                                                disabled={!!(currentUser && !currentUser.emailVerified)}
                                                 className={`text-xs font-semibold transition-colors ${currentUser && !currentUser.emailVerified ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-800'}`}
                                             >
                                                 {currentUser && !currentUser.emailVerified ? 'Verify to Add' : '+ Add Photo'}
@@ -667,7 +667,7 @@ export default function MapPage() {
                                                     if (!currentUser.emailVerified) return;
                                                     setReviewingPlaceId(selectedPlace.id)
                                                 }}
-                                                disabled={currentUser && !currentUser.emailVerified}
+                                                disabled={!!(currentUser && !currentUser.emailVerified)}
                                                 className={`text-xs font-semibold transition-colors ${currentUser && !currentUser.emailVerified ? 'text-gray-300 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-800'}`}
                                             >
                                                 {currentUser && !currentUser.emailVerified ? 'Verify to Review' : 'Write a Review'}
