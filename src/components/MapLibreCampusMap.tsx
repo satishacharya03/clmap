@@ -266,6 +266,7 @@ export default function MapLibreCampusMap({
     const userLocation = useRef<{ lat: number; lng: number } | null>(null)
     const [navStatus, setNavStatus] = useState<'idle' | 'locating' | 'routing' | 'walking' | 'error'>('idle')
     const [navStats, setNavStats] = useState<{ dist: number, time: number } | null>(null)
+    const cachedRouteRef = useRef<{ coords: [number, number][], dist: number, time: number } | null>(null)
 
     // ── Draggable Status Bar State ──
     const [barPos, setBarPos] = useState({ top: 80, left: 16 })
@@ -523,6 +524,21 @@ export default function MapLibreCampusMap({
             if (!map.current) return
             map.current.setMinZoom(currentMinZoom)
             setupCustomLayers(map.current, next)
+            // Re-draw route if we have cached data
+            if (cachedRouteRef.current && map.current) {
+                const { coords } = cachedRouteRef.current
+                if (!map.current.getSource('route-main')) {
+                    map.current.addSource('route-main', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+                    map.current.addSource('route-walk', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+                    map.current.addLayer({ id: 'route-walk-line', type: 'line', source: 'route-walk', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 2.5, 'line-dasharray': [0.1, 2.5], 'line-opacity': 0.8 } })
+                    map.current.addLayer({ id: 'route-main-line', type: 'line', source: 'route-main', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#4f46e5', 'line-width': 6, 'line-opacity': 0.8 } })
+                }
+                (map.current.getSource('route-main') as maplibregl.GeoJSONSource).setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords.slice(1, -1) }, properties: {} });
+                (map.current.getSource('route-walk') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [
+                    { type: 'Feature', geometry: { type: 'LineString', coordinates: [coords[0], coords[1]] }, properties: {} },
+                    { type: 'Feature', geometry: { type: 'LineString', coordinates: [coords[coords.length-2], coords[coords.length-1]] }, properties: {} }
+                ]});
+            }
         }
         map.current.once('styledata', () => {
             if (map.current?.isStyleLoaded()) afterStyle()
@@ -824,6 +840,7 @@ export default function MapLibreCampusMap({
 
     const handleRemoveRoute = useCallback(() => {
         if (!map.current) return
+        cachedRouteRef.current = null
         if (map.current.getSource('route-main')) {
             (map.current.getSource('route-main') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] })
         }
@@ -875,6 +892,8 @@ export default function MapLibreCampusMap({
                     ...route.coordinates,
                     [endLng, endLat]
                 ]
+
+                cachedRouteRef.current = { coords, dist: routeDist, time: routeTime }
 
                 if (animate) {
                     const lookAhead = Math.min(3, coords.length - 1);
@@ -1019,49 +1038,48 @@ export default function MapLibreCampusMap({
                     )}
 
                     {navStatus !== 'idle' && (
-                        <div className="bg-gray-900/95 text-white px-5 py-4 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 flex items-center justify-between gap-6 min-w-[320px] backdrop-blur-md">
+                        <div className="bg-gray-900/95 text-white px-4 py-3 rounded-[1.5rem] shadow-[0_15px_40px_rgba(0,0,0,0.4)] border border-white/10 flex items-center justify-between gap-4 min-w-[280px] backdrop-blur-md">
                             {/* Drag handle visual */}
-                            <div className="absolute top-1.5 left-1/2 -translate-x-1/2 flex gap-1 opacity-30">
-                                <div className="w-1 h-1 bg-white rounded-full" />
-                                <div className="w-1 h-1 bg-white rounded-full" />
-                                <div className="w-1 h-1 bg-white rounded-full" />
+                            <div className="absolute top-1 left-1/2 -translate-x-1/2 flex gap-1 opacity-20">
+                                <div className="w-1 h-0.5 bg-white rounded-full" />
+                                <div className="w-1 h-0.5 bg-white rounded-full" />
                             </div>
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3">
                                 <div className="relative">
-                                    {navStatus === 'walking' && <div className="absolute -inset-2 bg-green-500/20 rounded-full animate-ping" />}
-                                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg relative z-10">
-                                        <span className="text-2xl">🏁</span>
+                                    {navStatus === 'walking' && <div className="absolute -inset-1.5 bg-green-500/20 rounded-full animate-ping" />}
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg relative z-10">
+                                        <span className="text-xl">🏁</span>
                                     </div>
                                 </div>
                                 
                                 <div className="flex flex-col">
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                                        <span className="text-[10px] font-black text-green-400 uppercase tracking-[0.1em]">
-                                            {navStatus === 'locating' ? 'Locating...' : navStatus === 'routing' ? 'Routing...' : 'Walking Now'}
+                                    <div className="flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+                                        <span className="text-[9px] font-black text-green-400 uppercase tracking-wider">
+                                            {navStatus === 'walking' ? 'Walking' : 'Routing'}
                                         </span>
                                     </div>
-                                    <div className="flex flex-col mt-1">
-                                        <span className="text-xs font-black text-white truncate max-w-[140px] tracking-tight">{navigateToPlace?.name || 'Destination'}</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-white truncate max-w-[120px] tracking-tight">{navigateToPlace?.name || 'Goal'}</span>
                                         {navStats && (
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <span className="text-lg font-black text-white">{Math.max(1, Math.round(navStats.time / 60))}</span>
-                                                <span className="text-[10px] font-bold text-white/50 uppercase">min</span>
-                                                <span className="w-1 h-1 bg-white/20 rounded-full mx-1" />
-                                                <span className="text-sm font-bold text-green-400/90">{Math.round(navStats.dist)}m</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-sm font-black text-white">{Math.max(1, Math.round(navStats.time / 60))}m</span>
+                                                <span className="w-0.5 h-0.5 bg-white/20 rounded-full" />
+                                                <span className="text-xs font-bold text-green-400/90">{Math.round(navStats.dist)}m</span>
                                             </div>
                                         )}
                                     </div>
                                 </div>
                             </div>
                             
-                            <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-1.5">
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); handleRecenter(); }}
-                                    className="bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-400 text-[10px] font-black px-3 py-1.5 rounded-lg transition-all border border-indigo-500/30 flex items-center justify-center gap-1.5"
+                                    className="bg-white/5 hover:bg-white/15 text-white/80 p-2 rounded-xl transition-all border border-white/5"
+                                    title="Recenter"
                                 >
-                                    <span>🎯</span> RECENTER
+                                    🎯
                                 </button>
                                 <button 
                                     onClick={(e) => {
@@ -1071,9 +1089,9 @@ export default function MapLibreCampusMap({
                                         setNavStatus('idle');
                                         onCancelNavigation?.();
                                     }}
-                                    className="bg-red-500/20 hover:bg-red-500/40 text-red-400 text-[10px] font-black px-3 py-1.5 rounded-lg transition-all border border-red-500/30 flex items-center justify-center gap-1.5"
+                                    className="bg-red-500/20 hover:bg-red-500/40 text-red-400 text-[10px] font-black px-3 py-2 rounded-xl transition-all border border-red-500/20"
                                 >
-                                    <span>✖</span> EXIT
+                                    EXIT
                                 </button>
                             </div>
                         </div>
@@ -1101,10 +1119,6 @@ export default function MapLibreCampusMap({
                         <button onClick={() => setIsFirstPerson(!isFirstPerson)} className={`w-11 h-11 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${isFirstPerson ? 'bg-indigo-500 text-white shadow-indigo-500/40' : 'bg-white/10 text-white hover:bg-white/20'}`} title="Toggle First Person">
                             {isFirstPerson ? <span>🦅</span> : <span>🚶</span>}
                         </button>
-                        <div className="w-px h-6 bg-white/10 self-center hidden md:block" />
-                        <div className="h-px w-6 bg-white/10 self-center md:hidden" />
-                        <button onClick={() => map.current?.zoomIn()} className="w-11 h-11 rounded-2xl bg-white/10 text-white hover:bg-white/20 transition-all flex items-center justify-center font-bold text-lg">+</button>
-                        <button onClick={() => map.current?.zoomOut()} className="w-11 h-11 rounded-2xl bg-white/10 text-white hover:bg-white/20 transition-all flex items-center justify-center font-bold text-lg">−</button>
                     </div>
                 </div>
             )}
