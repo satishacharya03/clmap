@@ -377,7 +377,8 @@ export default function MapPage() {
             </div>
 
             {/* ─── TOP SEARCH BAR ─── */}
-            <div className="absolute top-4 left-4 right-16 md:right-auto z-30 md:w-[320px]">
+            {!navigateToPlace && addMode === 'idle' && (
+                <div className="absolute top-4 left-4 right-16 md:right-auto z-30 md:w-[320px]">
                 {/* Search box */}
                 <div className="relative">
                     <div className="flex items-center bg-white/90 backdrop-blur-md rounded-full shadow-lg overflow-hidden border border-white/50 transition-all focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500/30">
@@ -468,15 +469,18 @@ export default function MapPage() {
                     </div>
                 )}
             </div>
+            )}
 
             {/* ─── PROFILE BUTTON ─── */}
-            <div className="absolute top-4 right-4 z-20">
-                <Link href="/profile" className="flex items-center gap-2.5 bg-white/10 hover:bg-white/20 transition-all backdrop-blur-md border border-white/20 rounded-full px-2 py-2 pr-4 shadow-lg group">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-inner" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
-                        {currentUser ? currentUser.name.charAt(0).toUpperCase() : '👤'}
-                    </div>
-                </Link>
-            </div>
+            {!navigateToPlace && addMode === 'idle' && (
+                <div className="absolute top-4 right-4 z-20">
+                    <Link href="/profile" className="flex items-center gap-2.5 bg-white/10 hover:bg-white/20 transition-all backdrop-blur-md border border-white/20 rounded-full px-2 py-2 pr-4 shadow-lg group">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-inner" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
+                            {currentUser ? currentUser.name.charAt(0).toUpperCase() : '👤'}
+                        </div>
+                    </Link>
+                </div>
+            )}
 
             {/* Pin drop instructions now handled by unified draggable bar in MapLibreCampusMap */}
 
@@ -918,7 +922,7 @@ export default function MapPage() {
             )}
 
             {/* ─── FLOATING BOTTOM-LEFT BUTTONS ─── */}
-            {addMode === 'idle' && (
+            {addMode === 'idle' && !navigateToPlace && (
                 <div className="absolute left-4 bottom-8 z-30 flex items-center gap-2">
                     {/* Add Place — icon-only + button */}
                     <button
