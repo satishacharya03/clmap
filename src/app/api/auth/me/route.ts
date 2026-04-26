@@ -1,9 +1,6 @@
-
-
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 
-// GET /api/auth/me - Get current user
 export async function GET() {
     try {
         const user = await getCurrentUser()
@@ -20,7 +17,7 @@ export async function GET() {
                 id: user.id,
                 name: user.name,
                 email: user.email,
-                role: user.role
+                role: (user as any).role || 'USER'
             }
         })
     } catch (error) {
@@ -31,7 +28,3 @@ export async function GET() {
         )
     }
 }
-
-
-export const runtime = 'edge';
-

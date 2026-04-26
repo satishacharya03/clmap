@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { signUp } from '@/lib/auth-client'
 
 export default function RegisterPage() {
     const router = useRouter()
@@ -20,13 +21,13 @@ export default function RegisterPage() {
         if (password.length < 6) { setError('Password must be at least 6 characters'); return }
         setIsLoading(true)
         try {
-            const res = await fetch('/api/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email, password })
+            const { error: authError } = await signUp.email({
+                email,
+                password,
+                name,
+                callbackURL: '/map'
             })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error || data.details?.[0] || 'Registration failed')
+            if (authError) throw new Error(authError.message || 'Registration failed')
             router.push('/map')
             router.refresh()
         } catch (err) {
