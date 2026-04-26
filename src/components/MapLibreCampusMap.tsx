@@ -947,11 +947,11 @@ export default function MapLibreCampusMap({
 
             {/* Map Controls */}
             {!pinDropMode && (
-                <div className="absolute top-4 right-4 z-10 flex gap-2">
-                    <button onClick={toggleSatellite} className={`px-4 py-2.5 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center gap-2 backdrop-blur-md border ${isSatellite ? 'bg-indigo-500/90 border-indigo-400 text-white' : 'bg-white/90 border-white/60 text-gray-700 hover:bg-white'}`} title="Toggle satellite view">
+                <div className="absolute top-16 right-4 md:top-4 md:right-[4.5rem] z-10 flex flex-col md:flex-row gap-2">
+                    <button onClick={toggleSatellite} className={`px-4 py-2.5 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 backdrop-blur-md border ${isSatellite ? 'bg-indigo-500/90 border-indigo-400 text-white' : 'bg-white/90 border-white/60 text-gray-700 hover:bg-white'}`} title="Toggle satellite view">
                         {isSatellite ? <><span>🗺️</span></> : <><span>🛰️</span></>}
                     </button>
-                    <button onClick={() => setIsFirstPerson(!isFirstPerson)} className={`px-4 py-2.5 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center gap-2 backdrop-blur-md border ${isFirstPerson ? 'bg-indigo-500/90 border-indigo-400 text-white' : 'bg-white/90 border-white/60 text-gray-700 hover:bg-white'}`}>
+                    <button onClick={() => setIsFirstPerson(!isFirstPerson)} className={`px-4 py-2.5 rounded-2xl shadow-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 backdrop-blur-md border ${isFirstPerson ? 'bg-indigo-500/90 border-indigo-400 text-white' : 'bg-white/90 border-white/60 text-gray-700 hover:bg-white'}`}>
                         {isFirstPerson ? <><span>🚶</span></> : <><span>🦅</span></>}
                     </button>
                 </div>

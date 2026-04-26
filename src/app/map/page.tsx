@@ -356,7 +356,7 @@ export default function MapPage() {
             </div>
 
             {/* ─── TOP SEARCH BAR ─── */}
-            <div className="absolute top-4 left-4 right-4 md:right-auto z-30 md:w-[320px]">
+            <div className="absolute top-4 left-4 right-16 md:right-auto z-30 md:w-[320px]">
                 {/* Search box */}
                 <div className="relative">
                     <div className="flex items-center bg-white/90 backdrop-blur-md rounded-full shadow-lg overflow-hidden border border-white/50 transition-all focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500/30">

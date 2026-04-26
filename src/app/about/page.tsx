@@ -100,9 +100,38 @@ export default function AboutPage() {
                     <h1 className="text-3xl sm:text-5xl font-extrabold text-white mb-3 leading-tight">
                         About CampusNav
                     </h1>
-                    <p className="text-white/80 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
+                    <p className="text-white/80 text-sm sm:text-base max-w-xl mx-auto leading-relaxed mb-6">
                         A real-time 3D campus map helping students, visitors and staff find any place instantly.
                     </p>
+                    <button 
+                        onClick={() => {
+                            const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+                            if (isStandalone) {
+                                alert("You are already using the installed CampusNav app! 🎉");
+                                return;
+                            }
+
+                            // @ts-ignore
+                            const promptEvent = window.deferredPWAInstallPrompt;
+                            if (promptEvent) {
+                                promptEvent.prompt();
+                                promptEvent.userChoice.then(() => {
+                                    // @ts-ignore
+                                    window.deferredPWAInstallPrompt = null;
+                                });
+                            } else {
+                                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                                if (isIOS) {
+                                    alert("To install on iOS: Tap the Share button (square with arrow) at the bottom, then select 'Add to Home Screen'.");
+                                } else {
+                                    alert("App is already installed on your device! Please open it from your Home Screen or App Launcher.");
+                                }
+                            }
+                        }}
+                        className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-bold text-indigo-600 bg-white hover:bg-indigo-50 transition-all shadow-lg active:scale-95"
+                    >
+                        <span>📱</span> Download App
+                    </button>
                 </div>
             </div>
 
