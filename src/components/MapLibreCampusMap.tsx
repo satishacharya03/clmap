@@ -277,7 +277,9 @@ export default function MapLibreCampusMap({
         if (layersAdded.current) return
         layersAdded.current = true
 
-        m.setMaxBounds([[76.5670, 30.7620], [76.5840, 30.7775]])
+        if (m.getPitch() < 80) {
+            m.setMaxBounds([[76.5670, 30.7620], [76.5840, 30.7775]])
+        }
 
         const style = m.getStyle()
         const sources = style.sources || {}
@@ -604,10 +606,8 @@ export default function MapLibreCampusMap({
         // Accumulate velocity
         if (keys.has('w') || keys.has('arrowup')) vel.fwd = Math.min(vel.fwd + WALK_ACCEL, WALK_MAX)
         if (keys.has('s') || keys.has('arrowdown')) vel.fwd = Math.max(vel.fwd - WALK_ACCEL, -WALK_MAX)
-        if (keys.has('a')) vel.side = Math.max(vel.side - SEEK_ACCEL, -SEEK_MAX)
-        if (keys.has('d')) vel.side = Math.min(vel.side + SEEK_ACCEL, SEEK_MAX)
-        if (keys.has('arrowleft') || keys.has('q')) vel.rot = Math.max(vel.rot - ROT_SPEED, -ROT_SPEED * 2)
-        if (keys.has('arrowright') || keys.has('e')) vel.rot = Math.min(vel.rot + ROT_SPEED, ROT_SPEED * 2)
+        if (keys.has('a') || keys.has('arrowleft') || keys.has('q')) vel.rot = Math.max(vel.rot - ROT_SPEED, -ROT_SPEED * 2)
+        if (keys.has('d') || keys.has('arrowright') || keys.has('e')) vel.rot = Math.min(vel.rot + ROT_SPEED, ROT_SPEED * 2)
 
         // Friction
         vel.fwd *= WALK_FRICTION
@@ -627,9 +627,18 @@ export default function MapLibreCampusMap({
         const newBearing = m.getBearing() + vel.rot
         const newBearingRad = (newBearing * Math.PI) / 180
 
-        // Move eye for walk / strafe
-        eye.lng += Math.sin(newBearingRad) * vel.fwd + Math.cos(newBearingRad) * vel.side
-        eye.lat += Math.cos(newBearingRad) * vel.fwd - Math.sin(newBearingRad) * vel.side
+        // Move eye for walk / strafe with Boundary Check
+        const nextLng = eye.lng + Math.sin(newBearingRad) * vel.fwd + Math.cos(newBearingRad) * vel.side
+        const nextLat = eye.lat + Math.cos(newBearingRad) * vel.fwd - Math.sin(newBearingRad) * vel.side
+
+        if (isWithinCU(nextLat, nextLng)) {
+            eye.lng = nextLng
+            eye.lat = nextLat
+        } else {
+            // Hit campus boundary, stop forward/side momentum
+            vel.fwd = 0
+            vel.side = 0
+        }
 
         // center = eye + forward_direction * offset  (fixed offset, no recompute)
         // Rotation: eye fixed, center sweeps → person turns on the spot ✓
@@ -667,6 +676,7 @@ export default function MapLibreCampusMap({
             eyeRef.current = null
             m.scrollZoom.disable()
             m.dragPan.disable()   // disable default pan; we handle mouse ourselves
+            m.setMaxBounds(null)  // remove MapLibre's clamping so 1st-person center can go far ahead
             m.easeTo({ pitch: 85, zoom: 19, duration: 800 })
 
             // After easeTo settles: initialise eye + offset ONCE so every frame
@@ -707,7 +717,7 @@ export default function MapLibreCampusMap({
                 const x = 'touches' in e ? e.touches[0].clientX : e.clientX
                 const dx = x - lastX
                 lastX = x
-                const newBearing = map.current.getBearing() + dx * 0.3
+                const newBearing = map.current.getBearing() + dx * 0.05 // significantly reduced sensitivity
                 const newBearingRad = (newBearing * Math.PI) / 180
                 const off = offsetRef.current
                 const eye = eyeRef.current
@@ -744,6 +754,7 @@ export default function MapLibreCampusMap({
             m.easeTo({ pitch: 55, zoom: 16, duration: 800 })
             m.scrollZoom.enable()
             m.dragPan.enable()
+            m.setMaxBounds([[76.5670, 30.7620], [76.5840, 30.7775]]) // restore bounds
         }
     }, [isFirstPerson, moveCamera])
 
