@@ -1,5 +1,7 @@
 import { createNeonAuth } from '@neondatabase/auth/next/server';
+import { cookies } from 'next/headers';
 import prisma from './db';
+import { verifyToken } from './auth-legacy';
 // Next.js handles .env loading automatically.
 
 // ============ Neon Managed Auth Instance ============
@@ -17,19 +19,96 @@ export async function getSession() {
     return data;
 }
 
-export async function getCurrentUser() {
-    const session = await getSession();
-    if (!session?.user) return null;
+type DbUser = Awaited<ReturnType<typeof prisma.user.findUnique>>
+type AuthMethod = 'neon' | 'legacy'
 
-    // Automatically sync/provision the user in our local database
-    // Pass the session user directly to avoid recursion
-    const dbUser = await getOrCreateDbUser(session.user);
-    
+interface NeonAuthUser {
+    id: string
+    email: string
+    name?: string | null
+    image?: string | null
+    picture?: string | null
+    emailVerified?: boolean
+}
+
+export interface AppCurrentUser {
+    id: string
+    name: string
+    email: string
+    image: string | null
+    emailVerified: boolean
+    role: 'USER' | 'ADMIN'
+    authMethod: AuthMethod
+}
+
+function mapDbUserToAppUser(
+    dbUser: NonNullable<DbUser>,
+    fallback: Partial<{
+        id: string
+        name: string | null
+        email: string
+        image: string | null
+        emailVerified: boolean
+    }> = {},
+    authMethod: AuthMethod
+): AppCurrentUser {
     return {
-        ...session.user,
-        emailVerified: session.user.emailVerified,
-        role: dbUser?.role ?? 'USER'
+        id: dbUser.id,
+        name: dbUser.name ?? fallback.name ?? dbUser.email.split('@')[0],
+        email: dbUser.email,
+        image: dbUser.image ?? fallback.image ?? null,
+        emailVerified: dbUser.emailVerified,
+        role: dbUser.role,
+        authMethod,
     };
+}
+
+async function getLegacyCurrentUser() {
+    try {
+        const cookieStore = await cookies();
+        const token = cookieStore.get('auth-token')?.value;
+        if (!token) return null;
+
+        const payload = await verifyToken(token);
+        if (!payload?.email) return null;
+
+        const dbUser = await prisma.user.findUnique({
+            where: { email: payload.email },
+        });
+
+        if (!dbUser) return null;
+        return mapDbUserToAppUser(dbUser, {
+            id: payload.userId,
+            email: payload.email,
+            emailVerified: false,
+        }, 'legacy');
+    } catch (error) {
+        console.error('Legacy auth lookup failed:', error);
+        return null;
+    }
+}
+
+export async function getCurrentUser() {
+    try {
+        const session = await getSession();
+        if (session?.user) {
+            const sessionUser = session.user as NeonAuthUser;
+            const dbUser = await getOrCreateDbUser(sessionUser);
+            if (dbUser) {
+                return mapDbUserToAppUser(dbUser, {
+                    id: sessionUser.id,
+                    name: sessionUser.name,
+                    email: sessionUser.email,
+                    image: sessionUser.image ?? sessionUser.picture ?? null,
+                    emailVerified: sessionUser.emailVerified,
+                }, 'neon');
+            }
+        }
+    } catch (error) {
+        console.error('Neon auth lookup failed:', error);
+    }
+
+    return await getLegacyCurrentUser();
 }
 
 /**
@@ -38,16 +117,15 @@ export async function getCurrentUser() {
  * Falls back to false if no matching user found.
  */
 export async function isAdmin() {
-    const neonUser = await getCurrentUser();
-    if (!neonUser?.email) return false;
-    return (neonUser as any).role === 'ADMIN';
+    const user = await getCurrentUser();
+    return user?.role === 'ADMIN';
 }
 
 /**
  * Sync the Neon user with our local Prisma database.
  * Auto-creates the DB record on first login if it doesn't exist yet.
  */
-export async function getOrCreateDbUser(neonUser: any) {
+export async function getOrCreateDbUser(neonUser: NeonAuthUser) {
     if (!neonUser?.email) {
         console.warn("⚠️ getOrCreateDbUser: No email provided in neonUser object");
         return null;
@@ -60,11 +138,22 @@ export async function getOrCreateDbUser(neonUser: any) {
 
         if (existing) {
             console.log(`✅ Found existing user in DB: ${neonUser.email}`);
-            // update emailVerified if it changed
-            if (existing.emailVerified !== neonUser.emailVerified) {
+            const nextName = neonUser.name ?? existing.name;
+            const nextImage = neonUser.image ?? neonUser.picture ?? existing.image ?? null;
+            const nextEmailVerified = neonUser.emailVerified ?? existing.emailVerified;
+
+            if (
+                existing.emailVerified !== nextEmailVerified ||
+                existing.name !== nextName ||
+                existing.image !== nextImage
+            ) {
                 return await prisma.user.update({
                     where: { email: neonUser.email },
-                    data: { emailVerified: neonUser.emailVerified }
+                    data: {
+                        name: nextName,
+                        image: nextImage,
+                        emailVerified: nextEmailVerified,
+                    }
                 });
             }
             return existing;
@@ -78,7 +167,7 @@ export async function getOrCreateDbUser(neonUser: any) {
                 name: neonUser.name ?? neonUser.email.split('@')[0],
                 email: neonUser.email,
                 emailVerified: neonUser.emailVerified ?? false,
-                image: (neonUser as any).image ?? (neonUser as any).picture ?? null,
+                image: neonUser.image ?? neonUser.picture ?? null,
                 role: 'USER',
             },
         });

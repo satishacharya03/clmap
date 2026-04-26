@@ -3,7 +3,7 @@
 import { useState, FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { signUp, signIn, emailOtp } from '@/lib/auth-client'
+import { signUp, signIn } from '@/lib/auth-client'
 
 function Spinner() {
     return (

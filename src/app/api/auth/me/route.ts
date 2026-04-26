@@ -1,6 +1,5 @@
-import { NextResponse, NextRequest } from 'next/server'
-import { getCurrentUser, getOrCreateDbUser } from '@/lib/auth'
-import prisma from '@/lib/db'
+import { NextResponse } from 'next/server'
+import { getCurrentUser, type AppCurrentUser } from '@/lib/auth'
 
 // GET /api/auth/me — returns current user + role from our DB
 export async function GET() {
@@ -11,14 +10,17 @@ export async function GET() {
             return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
         }
 
+        const appUser: AppCurrentUser = user
+
         return NextResponse.json({
             user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                image: (user as any).image,
-                emailVerified: (user as any).emailVerified,
-                role: (user as any).role || 'USER',
+                id: appUser.id,
+                name: appUser.name,
+                email: appUser.email,
+                image: appUser.image,
+                emailVerified: appUser.emailVerified,
+                role: appUser.role,
+                authMethod: appUser.authMethod,
             }
         })
     } catch (error) {

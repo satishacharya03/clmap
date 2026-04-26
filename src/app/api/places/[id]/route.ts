@@ -2,42 +2,19 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { Pool } from '@neondatabase/serverless'
-import { jwtVerify } from 'jose'
+import { getCurrentUser } from '@/lib/auth'
 
 // Initialize Neon Pool
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
-// Auth Helper Types
-interface TokenPayload {
-    userId: string
-    role: string
-    [key: string]: unknown
-}
-
-// Helper to verify token and get user role from DB if needed
-async function getEdgeUser(request: NextRequest) {
-    try {
-        const token = request.cookies.get('auth-token')?.value
-        if (!token) return null
-
-        const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-change-me')
-        const { payload } = await jwtVerify(token, secret)
-
-        // Return payload directly as it contains role
-        return payload as unknown as TokenPayload
-    } catch {
-        return null
-    }
-}
-
 // GET /api/places/[id] - Get place details
 export async function GET(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const { id } = await params
-        const user = await getEdgeUser(request)
+        const user = await getCurrentUser()
 
         // Raw SQL query to fetch place with all relations
         // Using json_build_object to structure the response like Prisma include
@@ -111,11 +88,11 @@ export async function GET(
 
 // PUT /api/places/[id] - Update place (admin only)
 export async function PUT(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const user = await getEdgeUser(request)
+        const user = await getCurrentUser()
         if (user?.role !== 'ADMIN') {
             return NextResponse.json(
                 { error: 'Admin access required' },
@@ -124,12 +101,21 @@ export async function PUT(
         }
 
         const { id } = await params
-        const body = await request.json()
+        const body = await _request.json() as Partial<{
+            name: string
+            description: string | null
+            categoryId: string
+            latitude: number | null
+            longitude: number | null
+            blockId: string | null
+            floorId: string | null
+            roomId: string | null
+        }>
         const { name, description, categoryId, latitude, longitude, blockId, floorId, roomId } = body
 
         // Construct dynamic UPDATE query
         const updates: string[] = []
-        const values: any[] = []
+        const values: Array<string | number | null> = []
         let paramIndex = 1
 
         if (name) {
@@ -181,8 +167,7 @@ export async function PUT(
         `
 
         // Execute update
-        const { rows: updatedRows } = await pool.query(query, values)
-        const updatedPlace = updatedRows[0]
+        await pool.query(query, values)
 
         // Fetch relations for response (like Prisma)
         const relationsQuery = `

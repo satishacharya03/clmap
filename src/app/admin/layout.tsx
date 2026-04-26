@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { authClient } from '@/lib/auth-client'
 
 const navItems = [
     { href: '/admin', label: 'Dashboard', icon: '📊', exact: true },
@@ -17,6 +18,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const router = useRouter()
 
     const handleLogout = async () => {
+        await authClient.signOut().catch(() => null)
         await fetch('/api/auth/logout', { method: 'POST' })
         router.push('/login')
     }

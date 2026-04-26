@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useTheme } from '@/lib/useTheme'
 import { authClient } from '@/lib/auth-client'
 
-interface User { id: string; name: string; email: string; role: string }
+interface User { id: string; name: string; email: string; role: string; emailVerified?: boolean }
 
 export default function ProfilePage() {
     const router = useRouter()
@@ -14,9 +14,10 @@ export default function ProfilePage() {
     const [user, setUser] = useState<User | null>(null)
     const [stats, setStats] = useState<{ places: number; reviews: number } | null>(null)
     const [isLoading, setIsLoading] = useState(true)
+    const [verificationStatus, setVerificationStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
 
     useEffect(() => {
-        authClient.getSession().then(() => fetch('/api/auth/me'))
+        fetch('/api/auth/me', { cache: 'no-store' })
             .then(r => { if (!r.ok) throw new Error(); return r.json() })
             .then(d => {
                 if (d.user) {
@@ -29,8 +30,28 @@ export default function ProfilePage() {
     }, [router])
 
     const handleLogout = async () => {
+        await authClient.signOut().catch(() => null)
         await fetch('/api/auth/logout', { method: 'POST' })
         router.push('/login')
+    }
+
+    const handleSendVerificationLink = async () => {
+        setVerificationStatus('loading')
+        try {
+            const res = await fetch('/api/auth/send-verification-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ callbackURL: window.location.href }),
+            })
+            const data = await res.json().catch(() => null)
+            if (!res.ok) throw new Error(data?.error || 'Failed to send verification link')
+            setVerificationStatus('sent')
+            setTimeout(() => setVerificationStatus('idle'), 5000)
+        } catch (error) {
+            console.error('Verification resend failed:', error)
+            setVerificationStatus('error')
+            setTimeout(() => setVerificationStatus('idle'), 5000)
+        }
     }
 
     if (isLoading) return (
@@ -72,6 +93,26 @@ export default function ProfilePage() {
             </nav>
 
             <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-16">
+                {user.emailVerified === false && (
+                    <div className="mb-6 rounded-2xl px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                        style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                        <div>
+                            <p className="text-sm font-semibold" style={{ color: '#f59e0b' }}>Email verification pending</p>
+                            <p className="text-sm mt-1" style={{ color: 'var(--cn-text-2)' }}>
+                                Your old account can still log in, but please verify your email to unlock all features.
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleSendVerificationLink}
+                            disabled={verificationStatus === 'loading' || verificationStatus === 'sent'}
+                            className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-60"
+                            style={{ background: verificationStatus === 'error' ? '#dc2626' : '#f59e0b' }}
+                        >
+                            {verificationStatus === 'loading' ? 'Sending...' : verificationStatus === 'sent' ? 'Link Sent' : verificationStatus === 'error' ? 'Try Again' : 'Send Verification Link'}
+                        </button>
+                    </div>
+                )}
+
                 <div className="mb-6">
                     <h1 className="text-2xl sm:text-3xl font-extrabold" style={{ color: 'var(--cn-text-1)' }}>My Profile</h1>
                     <p className="text-sm mt-1" style={{ color: 'var(--cn-text-3)' }}>Manage your account and preferences</p>

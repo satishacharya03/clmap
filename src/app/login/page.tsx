@@ -3,7 +3,7 @@
 import { useState, FormEvent, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { signIn, authClient } from '@/lib/auth-client'
+import { signIn } from '@/lib/auth-client'
 
 // ─── Google Icon ─────────────────────────────────────────────────────────────
 function GoogleIcon() {
@@ -60,14 +60,34 @@ function LoginForm() {
         setError(''); setInfo('')
         setIsLoading(true)
         try {
-            const { error: authError } = await signIn.email({
+            const neonLogin = await signIn.email({
                 email,
                 password,
                 callbackURL: redirectTo,
             })
-            if (authError) {
-                throw new Error(authError.message || 'Invalid email or password')
+
+            if (neonLogin.error) {
+                const legacyRes = await fetch('/api/auth/legacy-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                })
+
+                if (!legacyRes.ok) {
+                    const legacyData = await legacyRes.json().catch(() => null)
+                    throw new Error(
+                        legacyData?.error ||
+                        neonLogin.error.message ||
+                        'Invalid email or password'
+                    )
+                }
+
+                const legacyData = await legacyRes.json()
+                if (legacyData?.verificationRequired) {
+                    setInfo('Signed in with your existing account. Please verify your email from the banner on your profile page.')
+                }
             }
+
             router.push(redirectTo)
             router.refresh()
         } catch (err) {

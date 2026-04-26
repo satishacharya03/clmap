@@ -22,8 +22,7 @@ export default function Header() {
     const menuRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
-        authClient.getSession()
-            .then(() => fetch('/api/auth/me'))
+        fetch('/api/auth/me', { cache: 'no-store' })
             .then(r => r.ok ? r.json() : null)
             .then(d => { if (d) setUser(d.user) })
             .finally(() => setIsLoading(false))
@@ -39,23 +38,26 @@ export default function Header() {
     }, [])
 
     const handleLogout = async () => {
+        await authClient.signOut().catch(() => null)
         await fetch('/api/auth/logout', { method: 'POST' })
         setUser(null)
         window.location.href = '/login'
     }
 
     const handleResendVerification = async () => {
-        if (!user?.email) return
+        if (!user) return
         setResendStatus('loading')
         try {
-            const { error } = await authClient.emailOtp.sendVerificationOtp({ email: user.email, type: 'email-verification' })
-            if (error) throw error
+            const res = await fetch('/api/auth/send-verification-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ callbackURL: window.location.href }),
+            })
+            const data = await res.json().catch(() => null)
+            if (!res.ok) throw new Error(data?.error || 'Failed to send verification link')
             setResendStatus('sent')
             setTimeout(() => setResendStatus('idle'), 5000)
-            
-            // Optionally, forward them to the login flow to verify their OTP
-            // You can replace this logic if you use magic links for verification instead
-            alert("Verification OTP sent! Please logout and sign in using your email to enter the OTP.");
+            alert('Verification link sent. Please check your email inbox.')
         } catch (err) {
             console.error('Failed to resend:', err)
             setResendStatus('error')
