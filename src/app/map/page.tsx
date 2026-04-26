@@ -49,7 +49,6 @@ export default function MapPage() {
     const [searchResults, setSearchResults] = useState<Place[]>([])
     const [showSearchResults, setShowSearchResults] = useState(false)
     const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
-    const [isDetailMinimized, setIsDetailMinimized] = useState(false)
     const [flyToPlace, setFlyToPlace] = useState<Place | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [currentUser, setCurrentUser] = useState<{ id: string; name: string; role: string } | null>(null)
@@ -168,7 +167,6 @@ export default function MapPage() {
     const handlePlaceClick = async (place: Place) => {
         // Optimistically set the base place
         setSelectedPlace(place)
-        setIsDetailMinimized(false)
         setFlyToPlace(place)
         setShowSearchResults(false)
 
@@ -373,8 +371,8 @@ export default function MapPage() {
                     onPlaceClick={handlePlaceClick}
                     onCancelNavigation={() => {
                         setNavigateToPlace(null);
-                        setIsDetailMinimized(false);
                     }}
+                    onCancelAdd={cancelAdd}
                 />
             </div>
 
@@ -480,49 +478,17 @@ export default function MapPage() {
                 </Link>
             </div>
 
-            {/* ─── PIN DROP INSTRUCTION TOAST ─── */}
-            {addMode === 'pin-drop' && (
-                <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                    <div className="bg-gray-900/95 backdrop-blur-sm text-white px-6 py-3 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3 animate-bounce-gentle">
-                        <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center animate-pulse flex-shrink-0">
-                            <span className="text-base">📍</span>
-                        </div>
-                        <div>
-                            <p className="font-semibold text-sm">Click anywhere on the map</p>
-                            <p className="text-white/60 text-xs">to drop your pin and add a new place</p>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Pin drop instructions now handled by unified draggable bar in MapLibreCampusMap */}
 
             {/* ─── PLACE DETAIL PANEL ─── */}
             {selectedPlace && addMode === 'idle' && (
                 <div className="absolute bottom-0 left-0 right-0 md:left-4 md:bottom-4 md:right-auto z-40 md:w-96">
-                    {isDetailMinimized ? (
-                        <div className="bg-white px-4 py-3 md:rounded-2xl rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.2)] md:shadow-2xl flex items-center justify-between cursor-pointer transition-all hover:bg-gray-50" 
-                             onClick={() => setIsDetailMinimized(false)}
-                             style={{ animation: 'slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" 
-                                     style={{ background: selectedPlace.category ? getColor(selectedPlace.category.id) + '18' : '#f3f4f6' }}>
-                                    <span>{selectedPlace.category?.icon || '📍'}</span>
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="font-bold text-gray-900 text-sm truncate max-w-[200px]">{selectedPlace.name}</span>
-                                    <span className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider">Navigating...</span>
-                                </div>
-                            </div>
-                            <button onClick={(e) => { e.stopPropagation(); setSelectedPlace(null); setIsDetailMinimized(false); setNavigateToPlace(null); }} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
+                    <div className="bg-white md:rounded-3xl rounded-t-3xl shadow-[0_-8px_40px_rgba(0,0,0,0.2)] md:shadow-2xl overflow-hidden"
+                        style={{ animation: 'slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}>
+                        {/* Drag handle (mobile) - just visual now */}
+                        <div className="flex justify-center pt-3 pb-1 md:hidden">
+                            <div className="w-10 h-1 bg-gray-200 rounded-full" />
                         </div>
-                    ) : (
-                        <div className="bg-white md:rounded-3xl rounded-t-3xl shadow-[0_-8px_40px_rgba(0,0,0,0.2)] md:shadow-2xl overflow-hidden"
-                            style={{ animation: 'slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}>
-                            {/* Drag handle (mobile) */}
-                            <div className="flex justify-center pt-3 pb-1 md:hidden" onClick={() => navigateToPlace && setIsDetailMinimized(true)}>
-                                <div className="w-10 h-1 bg-gray-200 rounded-full cursor-pointer" />
-                            </div>
 
                             <div className="px-5 pb-6 pt-2 max-h-[75vh] overflow-y-auto overflow-x-hidden">
                                 {/* Header */}
@@ -581,7 +547,7 @@ export default function MapPage() {
                                             if (selectedPlace.latitude && selectedPlace.longitude) {
                                                 setNavigateToPlace({ ...selectedPlace })
                                                 setFlyToPlace(null)
-                                                setIsDetailMinimized(true)
+                                                setSelectedPlace(null)
                                             }
                                         }}
                                         className="flex-1 py-3 text-sm font-semibold text-white rounded-xl flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
@@ -710,7 +676,6 @@ export default function MapPage() {
                                 </div>
                             </div>
                         </div>
-                    )}
                 </div>
             )}
 
@@ -985,23 +950,7 @@ export default function MapPage() {
                 </div>
             )}
 
-            {/* Cancel pin drop button */}
-            {addMode === 'pin-drop' && (
-                <button
-                    onClick={cancelAdd}
-                    className="absolute right-5 bottom-8 z-30 px-5 py-3 flex items-center gap-2 rounded-2xl text-white text-sm font-semibold transition-all hover:scale-105 active:scale-95"
-                    style={{
-                        background: 'rgba(239,68,68,0.9)',
-                        backdropFilter: 'blur(8px)',
-                        boxShadow: '0 8px 24px rgba(239,68,68,0.4)'
-                    }}
-                >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    Cancel
-                </button>
-            )}
+            {/* Cancel pin drop button now handled by unified draggable bar */}
 
             {/* No places yet info */}
             {!isLoading && placesWithCoords.length === 0 && addMode === 'idle' && (

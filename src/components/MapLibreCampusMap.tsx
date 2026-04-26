@@ -141,6 +141,7 @@ interface Props {
     onMapClick?: (lat: number, lng: number) => void
     onPlaceClick?: (place: Place) => void
     onCancelNavigation?: () => void
+    onCancelAdd?: () => void
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,7 +237,8 @@ export default function MapLibreCampusMap({
     selectedPlace,
     onMapClick,
     onPlaceClick,
-    onCancelNavigation
+    onCancelNavigation,
+    onCancelAdd,
 }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null)
     const map = useRef<maplibregl.Map | null>(null)
@@ -264,6 +266,57 @@ export default function MapLibreCampusMap({
     const userLocation = useRef<{ lat: number; lng: number } | null>(null)
     const [navStatus, setNavStatus] = useState<'idle' | 'locating' | 'routing' | 'walking' | 'error'>('idle')
     const [navStats, setNavStats] = useState<{ dist: number, time: number } | null>(null)
+
+    // ── Draggable Status Bar State ──
+    const [barPos, setBarPos] = useState({ top: 80, left: 16 })
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            setBarPos({
+                top: 80,
+                left: window.innerWidth > 768 ? window.innerWidth - 340 : 16
+            })
+        }
+    }, [])
+    const isDraggingBar = useRef(false)
+    const dragOffset = useRef({ x: 0, y: 0 })
+
+    const handleBarMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+        isDraggingBar.current = true
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
+        dragOffset.current = {
+            x: clientX - barPos.left,
+            y: clientY - barPos.top
+        }
+    }
+
+    const handleGlobalMouseMove = useCallback((e: MouseEvent | TouchEvent) => {
+        if (!isDraggingBar.current) return
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
+        
+        setBarPos({
+            top: Math.max(16, Math.min(window.innerHeight - 100, clientY - dragOffset.current.y)),
+            left: Math.max(16, Math.min(window.innerWidth - 300, clientX - dragOffset.current.x))
+        })
+    }, [barPos])
+
+    const handleGlobalMouseUp = useCallback(() => {
+        isDraggingBar.current = false
+    }, [])
+
+    useEffect(() => {
+        window.addEventListener('mousemove', handleGlobalMouseMove)
+        window.addEventListener('mouseup', handleGlobalMouseUp)
+        window.addEventListener('touchmove', handleGlobalMouseMove)
+        window.addEventListener('touchend', handleGlobalMouseUp)
+        return () => {
+            window.removeEventListener('mousemove', handleGlobalMouseMove)
+            window.removeEventListener('mouseup', handleGlobalMouseUp)
+            window.removeEventListener('touchmove', handleGlobalMouseMove)
+            window.removeEventListener('touchend', handleGlobalMouseUp)
+        }
+    }, [handleGlobalMouseMove, handleGlobalMouseUp])
 
     const categoryColorMap = useRef<Map<string, string>>(new Map())
     const getCategoryColor = useCallback((catId: string) => {
@@ -924,37 +977,82 @@ export default function MapLibreCampusMap({
         <div className="w-full h-full relative">
             <div ref={mapContainer} className="w-full h-full" />
 
-            {/* Navigation status overlay */}
-            {navStatus !== 'idle' && (
-                <div className="absolute top-[80px] right-4 z-50 pointer-events-none origin-top-right scale-90 md:scale-100">
-                    {navStatus === 'locating' && <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-2.5"><div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /><span className="text-xs font-semibold">Getting location…</span></div>}
-                    {navStatus === 'routing' && <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-2.5"><div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" /><span className="text-xs font-semibold">Calculating route…</span></div>}
-                    {navStatus === 'walking' && (
-                        <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-green-500/30 flex items-center justify-between gap-4 pointer-events-auto">
-                            <div className="flex items-center gap-2.5">
-                                <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.8)]" />
-                                <span className="text-xs font-semibold text-green-400">Navigating live…</span>
-                            </div>
-                            {navStats && (
-                                <div className="flex flex-col border-l border-white/20 pl-4 items-end">
-                                    <span className="text-sm font-bold text-white">{Math.max(1, Math.round(navStats.time / 60))} min</span>
-                                    <span className="text-xs text-white/70">{Math.round(navStats.dist)} m</span>
+            {/* Draggable Navigation/Add-Place status overlay */}
+            {(navStatus !== 'idle' || pinDropMode) && (
+                <div 
+                    className="absolute z-50 pointer-events-auto select-none"
+                    style={{ 
+                        top: barPos.top, 
+                        left: barPos.left,
+                        cursor: isDraggingBar.current ? 'grabbing' : 'grab',
+                        transition: isDraggingBar.current ? 'none' : 'all 0.1s ease-out'
+                    }}
+                    onMouseDown={handleBarMouseDown}
+                    onTouchStart={handleBarMouseDown}
+                >
+                    {pinDropMode && navStatus === 'idle' && (
+                         <div className="bg-gray-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl border border-indigo-500/40 flex items-center gap-4 min-w-[280px]">
+                             <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center animate-pulse flex-shrink-0 shadow-[0_0_15px_rgba(99,102,241,0.5)]">
+                                 <span className="text-xl">📍</span>
+                             </div>
+                             <div className="flex-1">
+                                 <p className="font-bold text-sm text-white leading-tight">Adding New Place</p>
+                                 <p className="text-indigo-300/70 text-[11px] mt-0.5">Click anywhere on campus map</p>
+                             </div>
+                             <button 
+                                 onClick={(e) => { e.stopPropagation(); onCancelAdd?.(); }}
+                                 className="ml-2 bg-white/10 hover:bg-red-500/30 hover:text-red-300 text-white text-[11px] font-bold px-4 py-2 rounded-xl transition-all border border-white/5 hover:border-red-500/20"
+                             >
+                                 Cancel
+                             </button>
+                         </div>
+                    )}
+
+                    {navStatus !== 'idle' && (
+                        <div className="bg-gray-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl border border-green-500/30 flex items-center justify-between gap-6 min-w-[300px]">
+                            <div className="flex items-center gap-3">
+                                {navStatus === 'locating' && <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />}
+                                {navStatus === 'routing' && <div className="w-5 h-5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />}
+                                {navStatus === 'walking' && <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse shadow-[0_0_12px_rgba(74,222,128,0.8)]" />}
+                                
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-green-400 uppercase tracking-wider">
+                                        {navStatus === 'locating' ? 'Locating...' : navStatus === 'routing' ? 'Routing...' : 'Live Navigation'}
+                                    </span>
+                                    {navStats && (
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-sm font-black text-white">{Math.max(1, Math.round(navStats.time / 60))} min</span>
+                                            <span className="w-1 h-1 bg-white/20 rounded-full" />
+                                            <span className="text-xs font-medium text-white/50">{Math.round(navStats.dist)} m</span>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
+                            </div>
+                            
                             <button 
-                                onClick={() => {
+                                onClick={(e) => {
+                                    e.stopPropagation();
                                     handleRemoveRoute();
                                     stopWalker();
                                     setNavStatus('idle');
                                     onCancelNavigation?.();
                                 }}
-                                className="bg-red-500/20 hover:bg-red-500/40 text-red-400 text-[10px] font-bold px-2 py-1 rounded-lg transition-colors border border-red-500/30"
+                                className="bg-red-500/20 hover:bg-red-500/40 text-red-400 text-[11px] font-black px-4 py-2 rounded-xl transition-all border border-red-500/30"
                             >
-                                Cancel
+                                EXIT
                             </button>
                         </div>
                     )}
-                    {navStatus === 'error' && <div className="bg-red-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-red-500/30 flex items-center gap-2.5"><span className="text-sm">⚠️</span><span className="text-xs font-semibold">Location error. Enable GPS.</span></div>}
+                    
+                    {navStatus === 'error' && (
+                        <div className="bg-red-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl border border-red-500/30 flex items-center gap-3">
+                            <span className="text-xl">⚠️</span>
+                            <div className="flex flex-col">
+                                <span className="text-[11px] font-bold text-red-300 uppercase">GPS Error</span>
+                                <span className="text-xs text-white/70">Please enable location access</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
