@@ -22,7 +22,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "De-tect - Smart Campus Navigation",
-  description: "Smart Campus Navigation and Information Platform - Find your way around campus easily",
+  description: "Chandigrah University Smart Campus Navigation  and Information Platform - Find your way around campus easily",
   keywords: [
     "campus", "navigation", "map", "university", "college", "places", "directions",
     "detect navigation", "cu map", "cu navigation", "chandigrah map", "chandigarh map",
