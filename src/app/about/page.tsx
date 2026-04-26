@@ -120,7 +120,7 @@ export default function AboutPage() {
                                     window.deferredPWAInstallPrompt = null;
                                 });
                             } else {
-                                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
                                 if (isIOS) {
                                     alert("To install on iOS: Tap the Share button (square with arrow) at the bottom, then select 'Add to Home Screen'.");
                                 } else {
