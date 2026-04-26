@@ -70,7 +70,7 @@ export default function AboutPage() {
             {/* ── STICKY NAV ── */}
             <nav className="sticky top-0 z-50 backdrop-blur-md" style={{ background: s.navBg, borderBottom: `1px solid ${s.navBorder}` }}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base overflow-hidden bg-white" style={{ boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
                             <img src="/logo.png" alt="De-tect Logo" className="w-full h-full object-cover" />
                         </div>
@@ -78,7 +78,7 @@ export default function AboutPage() {
                             <p className="font-bold text-sm leading-none" style={{ color: s.text1 }}>De-tect</p>
                             <p className="text-[10px]" style={{ color: '#6366f1' }}>About & Feedback</p>
                         </div>
-                    </div>
+                    </Link>
                     <div className="flex items-center gap-2">
                         {mounted && (
                             <button onClick={toggleTheme} title="Toggle theme"
