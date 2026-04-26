@@ -18,7 +18,17 @@ export async function getSession() {
 
 export async function getCurrentUser() {
     const session = await getSession();
-    return session?.user ?? null;
+    if (!session?.user) return null;
+
+    // Automatically sync/provision the user in our local database
+    // Pass the session user directly to avoid recursion
+    const dbUser = await getOrCreateDbUser(session.user);
+    
+    return {
+        ...session.user,
+        emailVerified: session.user.emailVerified,
+        role: dbUser?.role ?? 'USER'
+    };
 }
 
 /**
@@ -29,32 +39,31 @@ export async function getCurrentUser() {
 export async function isAdmin() {
     const neonUser = await getCurrentUser();
     if (!neonUser?.email) return false;
-
-    try {
-        const dbUser = await prisma.user.findUnique({
-            where: { email: neonUser.email },
-            select: { role: true },
-        });
-        return dbUser?.role === 'ADMIN';
-    } catch {
-        return false;
-    }
+    return (neonUser as any).role === 'ADMIN';
 }
 
 /**
- * Get the full user record from our DB synced with Neon Auth user.
+ * Sync the Neon user with our local Prisma database.
  * Auto-creates the DB record on first login if it doesn't exist yet.
  */
-export async function getOrCreateDbUser() {
-    const neonUser = await getCurrentUser();
-    if (!neonUser) return null;
+export async function getOrCreateDbUser(neonUser: any) {
+    if (!neonUser?.email) return null;
 
     try {
         const existing = await prisma.user.findUnique({
             where: { email: neonUser.email },
         });
 
-        if (existing) return existing;
+        if (existing) {
+            // Optional: update emailVerified if it changed
+            if (existing.emailVerified !== neonUser.emailVerified) {
+                return await prisma.user.update({
+                    where: { email: neonUser.email },
+                    data: { emailVerified: neonUser.emailVerified }
+                });
+            }
+            return existing;
+        }
 
         // Auto-provision on first login
         return await prisma.user.create({
@@ -67,7 +76,8 @@ export async function getOrCreateDbUser() {
                 role: 'USER',
             },
         });
-    } catch {
+    } catch (err) {
+        console.error("Error in getOrCreateDbUser:", err);
         return null;
     }
 }

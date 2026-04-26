@@ -67,35 +67,16 @@ export default function RegisterPage() {
                 callbackURL: '/map',
             })
             if (authError) throw new Error(authError.message || 'Registration failed')
-            // Registration succeeded — Neon Auth sends a verification email
-            setInfo('Account created! We sent a verification code to your email. Enter it below.')
-            setStep('verify')
+            
+            // Registration succeeded — Better Auth sends a verification link automatically
+            setInfo('Account created! A verification link has been sent to your email.')
+            
+            // Redirect to map immediately as requested
+            setTimeout(() => {
+                router.push('/map')
+            }, 1000)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Registration failed')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    // ── Step 2: Verify OTP ────────────────────────────────────────────────────
-    const handleVerify = async (e: FormEvent) => {
-        e.preventDefault()
-        setError(''); setInfo('')
-        setIsLoading(true)
-        try {
-            // Better Auth verifyEmail handles the code from the email
-            const { error: authError } = await emailOtp.verifyEmail({
-                email,
-                otp,
-            })
-            if (authError) throw new Error(authError.message || 'Invalid or expired code')
-            
-            setInfo('Email verified! Redirecting to login...')
-            setTimeout(() => {
-                router.push('/login')
-            }, 1500)
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Verification failed')
         } finally {
             setIsLoading(false)
         }
@@ -148,120 +129,59 @@ export default function RegisterPage() {
                         </div>
                     )}
 
-                    {/* ── Step 1: Registration form ─────────────────────── */}
-                    {step === 'register' && (
-                        <>
-                            <h2 className="text-xl font-bold text-white mb-6">Create your account</h2>
+                    {/* ── Registration form ─────────────────────── */}
+                    <h2 className="text-xl font-bold text-white mb-6">Create your account</h2>
 
-                            <form onSubmit={handleRegister} className="space-y-4">
-                                <Field label="Full Name" type="text" value={name}
-                                    onChange={e => setName(e.target.value)} required
-                                    placeholder="Your full name" autoComplete="name" />
-                                <Field label="Email" type="email" value={email}
-                                    onChange={e => setEmail(e.target.value)} required
-                                    placeholder="you@campus.edu" autoComplete="email" />
-                                <Field label="Password" type="password" value={password}
-                                    onChange={e => setPassword(e.target.value)} required
-                                    placeholder="Min. 8 characters" autoComplete="new-password" />
-                                <Field label="Confirm Password" type="password" value={confirmPassword}
-                                    onChange={e => setConfirmPassword(e.target.value)} required
-                                    placeholder="••••••••" autoComplete="new-password" />
+                    <form onSubmit={handleRegister} className="space-y-4">
+                        <Field label="Full Name" type="text" value={name}
+                            onChange={e => setName(e.target.value)} required
+                            placeholder="Your full name" autoComplete="name" />
+                        <Field label="Email" type="email" value={email}
+                            onChange={e => setEmail(e.target.value)} required
+                            placeholder="you@campus.edu" autoComplete="email" />
+                        <Field label="Password" type="password" value={password}
+                            onChange={e => setPassword(e.target.value)} required
+                            placeholder="Min. 8 characters" autoComplete="new-password" />
+                        <Field label="Confirm Password" type="password" value={confirmPassword}
+                            onChange={e => setConfirmPassword(e.target.value)} required
+                            placeholder="••••••••" autoComplete="new-password" />
 
-                                <button
-                                    type="submit"
-                                    disabled={isLoading}
-                                    className="w-full py-3.5 text-white font-bold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm mt-2 flex items-center justify-center gap-2"
-                                    style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 8px 24px rgba(99,102,241,0.4)' }}
-                                >
-                                    {isLoading ? <><Spinner /> Creating account...</> : 'Create Account →'}
-                                </button>
-                            </form>
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full py-3.5 text-white font-bold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm mt-2 flex items-center justify-center gap-2"
+                            style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 8px 24px rgba(99,102,241,0.4)' }}
+                        >
+                            {isLoading ? <><Spinner /> Creating account...</> : 'Create Account →'}
+                        </button>
+                    </form>
 
-                            <div className="relative my-6">
-                                <div className="absolute inset-0 flex items-center">
-                                    <div className="w-full border-t border-white/10" />
-                                </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="px-3 text-white/30">Or sign up with</span>
-                                </div>
-                            </div>
+                    <div className="relative my-6">
+                        <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-white/10" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="px-3 text-white/30">Or sign up with</span>
+                        </div>
+                    </div>
 
-                            <button
-                                onClick={handleGoogle}
-                                disabled={isLoading}
-                                className="w-full py-3.5 text-white/80 font-medium rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center gap-3 text-sm disabled:opacity-50"
-                            >
-                                <GoogleIcon />
-                                Continue with Google
-                            </button>
+                    <button
+                        onClick={handleGoogle}
+                        disabled={isLoading}
+                        className="w-full py-3.5 text-white/80 font-medium rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center gap-3 text-sm disabled:opacity-50"
+                    >
+                        <GoogleIcon />
+                        Continue with Google
+                    </button>
 
-                            <div className="mt-6 text-center">
-                                <p className="text-white/40 text-sm">
-                                    Already have an account?{' '}
-                                    <Link href="/login" className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">
-                                        Sign in
-                                    </Link>
-                                </p>
-                            </div>
-                        </>
-                    )}
-
-                    {/* ── Step 2: Email verification ────────────────────── */}
-                    {step === 'verify' && (
-                        <>
-                            <div className="flex items-center gap-3 mb-6">
-                                <button onClick={() => { setStep('register'); setError(''); setInfo('') }}
-                                    className="text-white/40 hover:text-white transition-colors text-sm">
-                                    ← Back
-                                </button>
-                                <h2 className="text-xl font-bold text-white">Verify your email</h2>
-                            </div>
-
-                            <div className="mb-6 p-4 rounded-2xl text-center"
-                                style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
-                                <div className="text-4xl mb-2">📬</div>
-                                <p className="text-white/70 text-sm">We sent a 6-digit code to</p>
-                                <p className="text-indigo-300 font-semibold text-sm mt-1">{email}</p>
-                            </div>
-
-                            <form onSubmit={handleVerify} className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
-                                        Verification Code
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={otp}
-                                        onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                        required
-                                        maxLength={6}
-                                        placeholder="1 2 3 4 5 6"
-                                        autoComplete="one-time-code"
-                                        className="w-full px-4 py-4 rounded-2xl border border-white/10 bg-white/5 text-white placeholder-white/20 focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/60 outline-none text-xl tracking-[0.5em] text-center transition-all font-mono"
-                                    />
-                                </div>
-
-                                <button
-                                    type="submit"
-                                    disabled={isLoading || otp.length < 6}
-                                    className="w-full py-3.5 text-white font-bold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
-                                    style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 8px 24px rgba(99,102,241,0.4)' }}
-                                >
-                                    {isLoading ? <><Spinner /> Verifying...</> : '✓ Verify & Continue'}
-                                </button>
-                            </form>
-
-                            <p className="mt-4 text-center text-xs text-white/30">
-                                Didn&apos;t receive it? Check spam or{' '}
-                                <button
-                                    onClick={() => setStep('register')}
-                                    className="text-indigo-400 hover:text-indigo-300 transition-colors underline"
-                                >
-                                    go back to resend
-                                </button>
-                            </p>
-                        </>
-                    )}
+                    <div className="mt-6 text-center">
+                        <p className="text-white/40 text-sm">
+                            Already have an account?{' '}
+                            <Link href="/login" className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">
+                                Sign in
+                            </Link>
+                        </p>
+                    </div>
                 </div>
 
                 <p className="text-center text-white/20 text-xs mt-5">Chandigarh University · Campus Navigation</p>

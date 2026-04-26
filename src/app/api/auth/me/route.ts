@@ -5,23 +5,20 @@ import prisma from '@/lib/db'
 // GET /api/auth/me — returns current user + role from our DB
 export async function GET() {
     try {
-        const neonUser = await getCurrentUser()
+        const user = await getCurrentUser()
 
-        if (!neonUser) {
+        if (!user) {
             return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
         }
 
-        // Auto-provision DB record on first login
-        const dbUser = await getOrCreateDbUser()
-
         return NextResponse.json({
             user: {
-                id: neonUser.id,
-                name: neonUser.name,
-                email: neonUser.email,
-                image: neonUser.image,
-                emailVerified: neonUser.emailVerified,
-                role: dbUser?.role ?? 'USER',
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                image: (user as any).image,
+                emailVerified: (user as any).emailVerified,
+                role: (user as any).role || 'USER',
             }
         })
     } catch (error) {

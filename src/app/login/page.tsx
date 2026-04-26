@@ -48,10 +48,8 @@ function LoginForm() {
     const searchParams = useSearchParams()
     const redirectTo = searchParams.get('redirect') || '/map'
 
-    const [tab, setTab] = useState<'login' | 'verify'>('login')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
-    const [otp, setOtp] = useState('')
     const [error, setError] = useState('')
     const [info, setInfo] = useState('')
     const [isLoading, setIsLoading] = useState(false)
@@ -68,14 +66,7 @@ function LoginForm() {
                 callbackURL: redirectTo,
             })
             if (authError) {
-                // Email not verified yet → prompt OTP tab
-                if (authError.code === 'EMAIL_NOT_VERIFIED' || authError.message?.toLowerCase().includes('verify')) {
-                    setInfo('A verification email was sent. Check your inbox and enter the code below.')
-                    setTab('verify')
-                } else {
-                    throw new Error(authError.message || 'Invalid email or password')
-                }
-                return
+                throw new Error(authError.message || 'Invalid email or password')
             }
             router.push(redirectTo)
             router.refresh()
@@ -125,15 +116,15 @@ function LoginForm() {
 
     // ── Resend verification email ────────────────────────────────────────────
     const handleResendVerification = async () => {
+        if (!email) { setError('Please enter your email first.'); return }
         setError(''); setInfo('')
         setIsLoading(true)
         try {
-            // Use the email OTP sign-in which re-sends the code
-            await signIn.emailOtp({ email, otp: '' })
-            setInfo('A new code has been sent to your email.')
-        } catch {
-            // Sending OTP will "fail" if otp is empty, that's fine — the email is sent
-            setInfo('A new code has been sent to your email.')
+            const { error } = await emailOtp.sendVerificationOtp({ email, type: 'email-verification' });
+            if (error) throw error;
+            setInfo('A new verification code has been sent to your email.');
+        } catch (err: any) {
+            setError(err.message || 'Failed to resend code. Try again later.');
         } finally {
             setIsLoading(false)
         }
@@ -178,136 +169,67 @@ function LoginForm() {
                         </div>
                     )}
 
-                    {/* ── TAB: Login ─────────────────────────────────────── */}
-                    {tab === 'login' && (
-                        <>
-                            <h2 className="text-xl font-bold text-white mb-6">Sign in to your account</h2>
+                    <h2 className="text-xl font-bold text-white mb-6">Sign in to your account</h2>
 
-                            <form onSubmit={handleEmailLogin} className="space-y-4">
-                                <Field
-                                    label="Email"
-                                    type="email"
-                                    value={email}
-                                    onChange={e => setEmail(e.target.value)}
-                                    required
-                                    placeholder="you@campus.edu"
-                                    autoComplete="email"
-                                />
-                                <Field
-                                    label="Password"
-                                    type="password"
-                                    value={password}
-                                    onChange={e => setPassword(e.target.value)}
-                                    required
-                                    placeholder="••••••••"
-                                    autoComplete="current-password"
-                                />
+                    <form onSubmit={handleEmailLogin} className="space-y-4">
+                        <Field
+                            label="Email"
+                            type="email"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            required
+                            placeholder="you@campus.edu"
+                            autoComplete="email"
+                        />
+                        <Field
+                            label="Password"
+                            type="password"
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            required
+                            placeholder="••••••••"
+                            autoComplete="current-password"
+                        />
 
-                                <button
-                                    type="submit"
-                                    disabled={isLoading}
-                                    className="w-full py-3.5 text-white font-bold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm mt-2 flex items-center justify-center gap-2"
-                                    style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 8px 24px rgba(99,102,241,0.4)' }}
-                                >
-                                    {isLoading ? <><Spinner /> Signing in...</> : 'Sign In →'}
-                                </button>
-                            </form>
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full py-3.5 text-white font-bold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm mt-2 flex items-center justify-center gap-2"
+                            style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 8px 24px rgba(99,102,241,0.4)' }}
+                        >
+                            {isLoading ? <><Spinner /> Signing in...</> : 'Sign In →'}
+                        </button>
+                    </form>
 
-                            {/* Divider */}
-                            <div className="relative my-6">
-                                <div className="absolute inset-0 flex items-center">
-                                    <div className="w-full border-t border-white/10" />
-                                </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="px-3 text-white/30" style={{ background: 'transparent' }}>Or continue with</span>
-                                </div>
-                            </div>
+                    {/* Divider */}
+                    <div className="relative my-6">
+                        <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-white/10" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="px-3 text-white/30" style={{ background: 'transparent' }}>Or continue with</span>
+                        </div>
+                    </div>
 
-                            {/* Google */}
-                            <button
-                                onClick={handleGoogleSignIn}
-                                disabled={isLoading}
-                                id="google-signin-btn"
-                                className="w-full py-3.5 text-white/80 font-medium rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center gap-3 text-sm disabled:opacity-50"
-                            >
-                                <GoogleIcon />
-                                Continue with Google
-                            </button>
+                    {/* Google */}
+                    <button
+                        onClick={handleGoogleSignIn}
+                        disabled={isLoading}
+                        id="google-signin-btn"
+                        className="w-full py-3.5 text-white/80 font-medium rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center gap-3 text-sm disabled:opacity-50"
+                    >
+                        <GoogleIcon />
+                        Continue with Google
+                    </button>
 
-                            {/* Verify via OTP link */}
-                            <button
-                                type="button"
-                                onClick={() => { setTab('verify'); setError(''); setInfo('Enter the code sent to your email.') }}
-                                className="mt-4 w-full text-center text-xs text-indigo-400/60 hover:text-indigo-400 transition-colors"
-                            >
-                                Have a verification code? Enter it here
-                            </button>
-
-                            <div className="mt-6 text-center">
-                                <p className="text-white/40 text-sm">
-                                    No account?{' '}
-                                    <Link href="/register" className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">
-                                        Create one free
-                                    </Link>
-                                </p>
-                            </div>
-                        </>
-                    )}
-
-                    {/* ── TAB: Email OTP Verify ──────────────────────────── */}
-                    {tab === 'verify' && (
-                        <>
-                            <div className="flex items-center gap-3 mb-6">
-                                <button onClick={() => { setTab('login'); setError(''); setInfo('') }} className="text-white/40 hover:text-white transition-colors">
-                                    ← Back
-                                </button>
-                                <h2 className="text-xl font-bold text-white">Verify your email</h2>
-                            </div>
-
-                            <form onSubmit={handleVerifyOtp} className="space-y-4">
-                                <Field
-                                    label="Email"
-                                    type="email"
-                                    value={email}
-                                    onChange={e => setEmail(e.target.value)}
-                                    required
-                                    placeholder="you@campus.edu"
-                                />
-                                <div>
-                                    <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
-                                        6-digit Code
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={otp}
-                                        onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                        required
-                                        maxLength={6}
-                                        placeholder="123456"
-                                        autoComplete="one-time-code"
-                                        className="w-full px-4 py-3.5 rounded-2xl border border-white/10 bg-white/5 text-white placeholder-white/25 focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/60 outline-none text-sm tracking-widest text-center transition-all"
-                                    />
-                                </div>
-
-                                <button
-                                    type="submit"
-                                    disabled={isLoading || otp.length < 6}
-                                    className="w-full py-3.5 text-white font-bold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
-                                    style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 8px 24px rgba(99,102,241,0.4)' }}
-                                >
-                                    {isLoading ? <><Spinner /> Verifying...</> : 'Verify & Sign In →'}
-                                </button>
-                            </form>
-
-                            <button
-                                onClick={handleResendVerification}
-                                disabled={isLoading || !email}
-                                className="mt-4 w-full text-center text-xs text-indigo-400/60 hover:text-indigo-400 transition-colors disabled:opacity-40"
-                            >
-                                Didn&apos;t receive it? Resend code
-                            </button>
-                        </>
-                    )}
+                    <div className="mt-6 text-center">
+                        <p className="text-white/40 text-sm">
+                            No account?{' '}
+                            <Link href="/register" className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">
+                                Create one free
+                            </Link>
+                        </p>
+                    </div>
                 </div>
 
                 <p className="text-center text-white/20 text-xs mt-5">

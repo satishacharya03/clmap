@@ -51,7 +51,7 @@ export default function MapPage() {
     const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
     const [flyToPlace, setFlyToPlace] = useState<Place | null>(null)
     const [isLoading, setIsLoading] = useState(true)
-    const [currentUser, setCurrentUser] = useState<{ id: string; name: string; role: string } | null>(null)
+    const [currentUser, setCurrentUser] = useState<{ id: string; name: string; role: string; emailVerified: boolean } | null>(null)
     const router = useRouter()
 
     // Add place state
@@ -191,6 +191,11 @@ export default function MapPage() {
     const enterPinDrop = useCallback(() => {
         if (!currentUser) {
             router.push('/login?redirect=' + encodeURIComponent('/map?action=add-place'))
+            return
+        }
+        if (!currentUser.emailVerified) {
+            // Trigger the verification banner warning or show an alert
+            alert('Please verify your email to add new places.')
             return
         }
         setAddMode('pin-drop')
@@ -375,6 +380,30 @@ export default function MapPage() {
                     onCancelAdd={cancelAdd}
                 />
             </div>
+
+            {/* ─── VERIFICATION BANNER ─── */}
+            {currentUser && !currentUser.emailVerified && (
+                <div className="absolute top-0 left-0 right-0 z-[100] bg-amber-500 text-white px-4 py-2 flex items-center justify-between shadow-lg animate-slideDown">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                        <span className="text-lg">📧</span>
+                        <p>Verify your email to unlock all features. Check your inbox for the link.</p>
+                    </div>
+                    <button 
+                        onClick={async () => {
+                            try {
+                                const { sendVerificationEmail } = await import('@/lib/auth-client')
+                                await sendVerificationEmail({ email: (currentUser as any).email, callbackURL: window.location.href })
+                                alert('Verification email resent!')
+                            } catch {
+                                alert('Failed to resend email.')
+                            }
+                        }}
+                        className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg text-xs font-bold transition-all"
+                    >
+                        Resend Link
+                    </button>
+                </div>
+            )}
 
             {/* ─── TOP SEARCH BAR ─── */}
             {!navigateToPlace && addMode === 'idle' && (
