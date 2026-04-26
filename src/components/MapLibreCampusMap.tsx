@@ -10,7 +10,8 @@ const CU_CENTER: [number, number] = [76.5766, 30.7699]
 const GATE_2_COORDS = { lat: 30.772587, lng: 76.576408 }
 
 function isWithinCU(lat: number, lng: number) {
-    return lat >= 30.7600 && lat <= 30.7800 && lng >= 76.5600 && lng <= 76.5900;
+    // Exact MapLibre maxBounds
+    return lat >= 30.7620 && lat <= 30.7775 && lng >= 76.5670 && lng <= 76.5840;
 }
 
 function calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -579,75 +580,76 @@ export default function MapLibreCampusMap({
     }, [searchQuery, places])
 
     // ── First-person physics walking ────────────────────────────────────────
-    // Human walking ~1.4 m/s. At lat 30°: 1° ≈ 111111m → 1.4m/s = 0.0000126°/s
-    // At 60fps that is 0.00000021°/frame. WALK_MAX is that cap.
-    const WALK_ACCEL = 0.000001  // acceleration per frame
-    const WALK_MAX = 0.000011  // ~1.4 m/s cap
-    // At 60fps that is 0.00000021°/frame. WALK_MAX is that cap.
-    const SEEK_ACCEL = 0.000001  // acceleration per frame
-    const SEEK_MAX = 0.000011  // ~1.4 m/s cap
+    // Calculate velocities in true meters per frame for physical accuracy
+    const WALK_ACCEL   = 0.005       // meters per frame^2
+    const WALK_MAX     = 0.04        // ~2.4 meters/sec
     const WALK_FRICTION = 0.80
-    const ROT_SPEED = 0.2        // degrees per frame for Q/E keys
+    const ROT_SPEED    = 0.9         // degrees per frame
 
-    const velRef = useRef({ fwd: 0, side: 0, rot: 0 })
-    // offsetRef: distance (degrees) from camera eye to map center along the
-    // bearing direction. Computed ONCE on entry (after easeTo settles) so
-    // all frames use the same value — prevents drift/orbit from float errors.
+    const velRef    = useRef({ fwd: 0, side: 0, rot: 0 })
+    // offsetRef: distance in METERS from camera eye to map center along bearing
     const offsetRef = useRef(0)
 
     const moveCamera = useCallback(() => {
         if (!map.current || !isFirstPerson || !eyeRef.current) return
         const keys = keysPressed.current
-        const vel = velRef.current
-        const m = map.current
-        const off = offsetRef.current
-        const eye = eyeRef.current
+        const vel  = velRef.current
+        const m    = map.current
+        const offM = offsetRef.current
+        const eye  = eyeRef.current
 
-        // Accumulate velocity
-        if (keys.has('w') || keys.has('arrowup')) vel.fwd = Math.min(vel.fwd + WALK_ACCEL, WALK_MAX)
-        if (keys.has('s') || keys.has('arrowdown')) vel.fwd = Math.max(vel.fwd - WALK_ACCEL, -WALK_MAX)
-        if (keys.has('a') || keys.has('arrowleft') || keys.has('q')) vel.rot = Math.max(vel.rot - ROT_SPEED, -ROT_SPEED * 2)
-        if (keys.has('d') || keys.has('arrowright') || keys.has('e')) vel.rot = Math.min(vel.rot + ROT_SPEED, ROT_SPEED * 2)
+        // Restore W,A,S,D,Q,E fully
+        if (keys.has('w') || keys.has('arrowup'))    vel.fwd  = Math.min(vel.fwd  + WALK_ACCEL,  WALK_MAX)
+        if (keys.has('s') || keys.has('arrowdown'))  vel.fwd  = Math.max(vel.fwd  - WALK_ACCEL, -WALK_MAX)
+        if (keys.has('a'))                           vel.side = Math.max(vel.side - WALK_ACCEL, -WALK_MAX)
+        if (keys.has('d'))                           vel.side = Math.min(vel.side + WALK_ACCEL,  WALK_MAX)
+        if (keys.has('arrowleft')  || keys.has('q')) vel.rot  = Math.max(vel.rot  - ROT_SPEED,  -ROT_SPEED * 2)
+        if (keys.has('arrowright') || keys.has('e')) vel.rot  = Math.min(vel.rot  + ROT_SPEED,   ROT_SPEED * 2)
 
         // Friction
-        vel.fwd *= WALK_FRICTION
+        vel.fwd  *= WALK_FRICTION
         vel.side *= WALK_FRICTION
-        vel.rot *= WALK_FRICTION
+        vel.rot  *= WALK_FRICTION
 
         // Snap to zero
-        if (Math.abs(vel.fwd) < 1e-9) vel.fwd = 0
-        if (Math.abs(vel.side) < 1e-9) vel.side = 0
-        if (Math.abs(vel.rot) < 0.01) vel.rot = 0
+        if (Math.abs(vel.fwd)  < 1e-4) vel.fwd  = 0
+        if (Math.abs(vel.side) < 1e-4) vel.side = 0
+        if (Math.abs(vel.rot)  < 0.01) vel.rot  = 0
 
         if (vel.fwd === 0 && vel.side === 0 && vel.rot === 0) {
             animationRef.current = requestAnimationFrame(moveCamera)
             return
         }
 
-        const newBearing = m.getBearing() + vel.rot
+        const newBearing    = m.getBearing() + vel.rot
         const newBearingRad = (newBearing * Math.PI) / 180
 
-        // Move eye for walk / strafe with Boundary Check
-        const nextLng = eye.lng + Math.sin(newBearingRad) * vel.fwd + Math.cos(newBearingRad) * vel.side
-        const nextLat = eye.lat + Math.cos(newBearingRad) * vel.fwd - Math.sin(newBearingRad) * vel.side
+        // Conversion factors: meters -> degrees (adjusting Longitude for Latitude spherical pinch)
+        const latConv = 111111
+        const lngConv = 111111 * Math.cos(eye.lat * Math.PI / 180)
+
+        // Delta in meters
+        const dLatMeters = Math.cos(newBearingRad) * vel.fwd - Math.sin(newBearingRad) * vel.side
+        const dLngMeters = Math.sin(newBearingRad) * vel.fwd + Math.cos(newBearingRad) * vel.side
+
+        const nextLat = eye.lat + (dLatMeters / latConv)
+        const nextLng = eye.lng + (dLngMeters / lngConv)
 
         if (isWithinCU(nextLat, nextLng)) {
-            eye.lng = nextLng
             eye.lat = nextLat
+            eye.lng = nextLng
         } else {
-            // Hit campus boundary, stop forward/side momentum
+            // Hit campus boundary, stop walking momentum
             vel.fwd = 0
             vel.side = 0
         }
 
-        // center = eye + forward_direction * offset  (fixed offset, no recompute)
-        // Rotation: eye fixed, center sweeps → person turns on the spot ✓
-        // Walking:  eye moves, center follows        → person walks forward ✓
+        // Center calculation: eye + offset (purely in meters, converted to degrees)
+        const centerLat = eye.lat + (Math.cos(newBearingRad) * offM) / latConv
+        const centerLng = eye.lng + (Math.sin(newBearingRad) * offM) / lngConv
+
         m.jumpTo({
-            center: {
-                lng: eye.lng + Math.sin(newBearingRad) * off,
-                lat: eye.lat + Math.cos(newBearingRad) * off,
-            },
+            center: { lng: centerLng, lat: centerLat },
             bearing: newBearing,
         })
 
@@ -686,19 +688,22 @@ export default function MapLibreCampusMap({
                 const c = map.current.getCenter()
                 const b = map.current.getBearing()
                 const bRad = (b * Math.PI) / 180
-                // ground distance (°) from eye to focal center at pitch=85, zoom=19
-                // fovRad=36.87°, tileSize=512px for openfreemap
+                // ground distance (meters) from eye to focal center at pitch=85, zoom=19
                 const fovRad = (36.87 * Math.PI) / 180
                 const canvasH = map.current.getCanvas().clientHeight || 800
                 const focalPx = (canvasH / 2) / Math.tan(fovRad / 2)
                 const mPerPx = (2 * Math.PI * 6378137) / (512 * Math.pow(2, map.current.getZoom()))
                 const altM = focalPx * mPerPx
                 const distM = altM * Math.tan((map.current.getPitch() * Math.PI) / 180)
-                const off = distM / 111111
-                offsetRef.current = off
+                
+                offsetRef.current = distM
+
+                const latConv = 111111
+                const lngConv = 111111 * Math.cos(c.lat * Math.PI / 180)
+
                 eyeRef.current = {
-                    lng: c.lng - Math.sin(bRad) * off,
-                    lat: c.lat - Math.cos(bRad) * off,
+                    lng: c.lng - (Math.sin(bRad) * distM) / lngConv,
+                    lat: c.lat - (Math.cos(bRad) * distM) / latConv,
                 }
                 if (animationRef.current) cancelAnimationFrame(animationRef.current)
                 animationRef.current = requestAnimationFrame(moveCamera)
@@ -717,15 +722,19 @@ export default function MapLibreCampusMap({
                 const x = 'touches' in e ? e.touches[0].clientX : e.clientX
                 const dx = x - lastX
                 lastX = x
-                const newBearing = map.current.getBearing() + dx * 0.05 // significantly reduced sensitivity
+                const newBearing = map.current.getBearing() + dx * 0.05 // reduced sensitivity
                 const newBearingRad = (newBearing * Math.PI) / 180
-                const off = offsetRef.current
+                const offM = offsetRef.current
                 const eye = eyeRef.current
+                
+                const latConv = 111111
+                const lngConv = 111111 * Math.cos(eye.lat * Math.PI / 180)
+
                 map.current.jumpTo({
                     bearing: newBearing,
                     center: {
-                        lng: eye.lng + Math.sin(newBearingRad) * off,
-                        lat: eye.lat + Math.cos(newBearingRad) * off,
+                        lng: eye.lng + (Math.sin(newBearingRad) * offM) / lngConv,
+                        lat: eye.lat + (Math.cos(newBearingRad) * offM) / latConv,
                     },
                 })
             }
