@@ -29,8 +29,9 @@ export async function POST(request: NextRequest) {
 // GET /api/feedback - List all feedback (admin only)
 export async function GET() {
     try {
-        const user = await getCurrentUser()
-        if (!user || user.role !== 'ADMIN') {
+        const { isAdmin } = await import('@/lib/auth')
+        const adminOk = await isAdmin()
+        if (!adminOk) {
             return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
         }
         const { rows } = await pool.query(

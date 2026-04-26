@@ -1,30 +1,31 @@
-import { NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth'
+import { NextResponse, NextRequest } from 'next/server'
+import { getCurrentUser, getOrCreateDbUser } from '@/lib/auth'
+import prisma from '@/lib/db'
 
+// GET /api/auth/me — returns current user + role from our DB
 export async function GET() {
     try {
-        const user = await getCurrentUser()
+        const neonUser = await getCurrentUser()
 
-        if (!user) {
-            return NextResponse.json(
-                { error: 'Not authenticated' },
-                { status: 401 }
-            )
+        if (!neonUser) {
+            return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
         }
+
+        // Auto-provision DB record on first login
+        const dbUser = await getOrCreateDbUser()
 
         return NextResponse.json({
             user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: (user as any).role || 'USER'
+                id: neonUser.id,
+                name: neonUser.name,
+                email: neonUser.email,
+                image: neonUser.image,
+                emailVerified: neonUser.emailVerified,
+                role: dbUser?.role ?? 'USER',
             }
         })
     } catch (error) {
         console.error('Auth check error:', error)
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        )
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }
