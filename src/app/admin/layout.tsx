@@ -29,12 +29,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {/* Logo */}
                 <div className="px-5 py-5 border-b border-white/5">
                     <Link href="/map" className="flex items-center gap-3 group">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg"
-                            style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
-                            🏫
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg overflow-hidden bg-white"
+                            style={{ boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
+                            <img src="/logo.png" alt="De-tect Logo" className="w-full h-full object-cover" />
                         </div>
                         <div>
-                            <p className="font-bold text-sm text-white leading-tight group-hover:text-indigo-300 transition-colors">CampusNav</p>
+                            <p className="font-bold text-sm text-white leading-tight group-hover:text-indigo-300 transition-colors">De-tect</p>
                             <p className="text-[10px] text-amber-400 font-semibold uppercase tracking-wider">Admin Panel</p>
                         </div>
                     </Link>

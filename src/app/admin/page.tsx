@@ -50,7 +50,7 @@ export default function AdminDashboard() {
             {/* Header */}
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
-                <p className="text-white/40 mt-1">CampusNav — Chandigarh University</p>
+                <p className="text-white/40 mt-1">De-tect — Chandigarh University</p>
             </div>
 
             {/* Stats grid */}

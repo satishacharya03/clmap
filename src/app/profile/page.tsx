@@ -46,8 +46,10 @@ export default function ProfilePage() {
             <nav className="sticky top-0 z-50 backdrop-blur-md" style={{ background: 'var(--cn-nav-bg)', borderBottom: '1px solid var(--cn-nav-border)', boxShadow: 'var(--cn-nav-shadow)' }}>
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
                     <Link href="/map" className="flex items-center gap-2 group">
-                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base shadow-sm flex-shrink-0" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>🗺️</div>
-                        <span className="font-bold text-sm" style={{ color: 'var(--cn-text-1)' }}>CampusNav</span>
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base overflow-hidden bg-white shadow-sm flex-shrink-0" style={{ boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
+                            <img src="/logo.png" alt="De-tect Logo" className="w-full h-full object-cover" />
+                        </div>
+                        <span className="font-bold text-sm" style={{ color: 'var(--cn-text-1)' }}>De-tect</span>
                     </Link>
                     <div className="flex items-center gap-2">
                         {/* Theme toggle */}

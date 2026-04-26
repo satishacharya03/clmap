@@ -958,7 +958,7 @@ export default function MapLibreCampusMap({
             )}
 
             {isFirstPerson && (
-                <div className="absolute bottom-20 left-4 z-10 bg-gray-900/90 text-white rounded-2xl p-4 backdrop-blur-sm shadow-2xl border border-white/10">
+                <div className="hidden md:block absolute bottom-20 left-4 z-10 bg-gray-900/90 text-white rounded-2xl p-4 backdrop-blur-sm shadow-2xl border border-white/10">
                     <p className="font-bold mb-3 text-sm text-indigo-300">🚶 Street View Controls</p>
                     <div className="grid grid-cols-2 gap-x-5 gap-y-1.5 text-xs">
                         <span className="font-mono bg-white/15 px-2 py-0.5 rounded text-center">W / ↑</span><span className="text-gray-300">Forward</span>

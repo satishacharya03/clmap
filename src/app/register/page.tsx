@@ -47,11 +47,10 @@ export default function RegisterPage() {
             <div className="w-full max-w-md relative z-10">
                 {/* Logo */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4"
-                        style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 8px 32px rgba(99,102,241,0.4)' }}>
-                        <span className="text-3xl">🏫</span>
-                    </div>
-                    <h1 className="text-3xl font-bold text-white">CampusNav</h1>
+                    <Link href="/map" className="inline-block transition-transform hover:scale-105 active:scale-95">
+                        <img src="/logo.png" alt="De-tect Logo" className="w-16 h-16 rounded-2xl mx-auto mb-4 object-cover shadow-[0_8px_32px_rgba(99,102,241,0.4)] bg-white" />
+                    </Link>
+                    <h1 className="text-3xl font-bold text-white">De-tect</h1>
                     <p className="text-white/50 mt-1 text-sm">Join the campus community</p>
                 </div>
 

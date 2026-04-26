@@ -71,9 +71,11 @@ export default function AboutPage() {
             <nav className="sticky top-0 z-50 backdrop-blur-md" style={{ background: s.navBg, borderBottom: `1px solid ${s.navBorder}` }}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base shadow-sm" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>🗺️</div>
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base overflow-hidden bg-white" style={{ boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
+                            <img src="/logo.png" alt="De-tect Logo" className="w-full h-full object-cover" />
+                        </div>
                         <div className="hidden sm:block">
-                            <p className="font-bold text-sm leading-none" style={{ color: s.text1 }}>CampusNav</p>
+                            <p className="font-bold text-sm leading-none" style={{ color: s.text1 }}>De-tect</p>
                             <p className="text-[10px]" style={{ color: '#6366f1' }}>About & Feedback</p>
                         </div>
                     </div>
@@ -98,7 +100,7 @@ export default function AboutPage() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-14 text-center">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-4 bg-white/20 text-white">✨ Chandigarh University</div>
                     <h1 className="text-3xl sm:text-5xl font-extrabold text-white mb-3 leading-tight">
-                        About CampusNav
+                        About De-tect
                     </h1>
                     <p className="text-white/80 text-sm sm:text-base max-w-xl mx-auto leading-relaxed mb-6">
                         A real-time 3D campus map helping students, visitors and staff find any place instantly.
@@ -107,7 +109,7 @@ export default function AboutPage() {
                         onClick={() => {
                             const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
                             if (isStandalone) {
-                                alert("You are already using the CampusNav app! 🎉");
+                                alert("You are already using the De-tect app! 🎉");
                                 return;
                             }
 
@@ -149,7 +151,7 @@ export default function AboutPage() {
                                 <h2 className="text-base sm:text-lg font-bold" style={{ color: s.text1 }}>Our Mission</h2>
                             </div>
                             <p className="text-sm leading-relaxed mb-5" style={{ color: s.text2 }}>
-                                We built CampusNav to solve a real problem — newcomers and even seasoned students often struggle to find specific labs, cafeterias and offices across the vast CU campus. With 3D buildings, turn-by-turn walking navigation and a community-driven places database, every campus journey is stress-free.
+                                We built De-tect to solve a real problem — newcomers and even seasoned students often struggle to find specific labs, cafeterias and offices across the vast CU campus. With 3D buildings, turn-by-turn walking navigation and a community-driven places database, every campus journey is stress-free.
                             </p>
                             <div className="grid grid-cols-3 gap-2">
                                 {FEATURES.map(f => (
@@ -204,7 +206,7 @@ export default function AboutPage() {
                                     <div className="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">💬</div>
                                     <div>
                                         <h2 className="text-lg font-bold text-white">Share Your Feedback</h2>
-                                        <p className="text-white/70 text-xs mt-0.5">Help us improve CampusNav for everyone</p>
+                                        <p className="text-white/70 text-xs mt-0.5">Help us improve De-tect for everyone</p>
                                     </div>
                                 </div>
                             </div>

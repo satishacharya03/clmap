@@ -18,8 +18,8 @@ const MapLibreCampusMap = dynamic(() => import('@/components/MapLibreCampusMap')
                 <div className="relative mx-auto mb-5 w-16 h-16">
                     <div className="absolute inset-0 rounded-full border-4 border-indigo-500/30 animate-ping" />
                     <div className="absolute inset-0 rounded-full border-4 border-t-indigo-400 border-r-transparent border-b-transparent border-l-transparent animate-spin" />
-                    <div className="absolute inset-2 rounded-full bg-indigo-500/20 flex items-center justify-center">
-                        <span className="text-xl">🗺️</span>
+                    <div className="absolute inset-2 rounded-full bg-indigo-500/20 flex items-center justify-center overflow-hidden">
+                        <img src="/logo.png" alt="De-tect Logo" className="w-full h-full object-cover" />
                     </div>
                 </div>
                 <p className="text-indigo-300 font-semibold text-base">Loading 3D Campus Map</p>

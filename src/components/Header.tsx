@@ -66,12 +66,12 @@ export default function Header() {
                 <div className="flex items-center justify-between h-16">
                     {/* Logo */}
                     <Link href="/map" className="flex items-center gap-2.5 group">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg"
-                            style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
-                            🏫
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg overflow-hidden bg-white"
+                            style={{ boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
+                            <img src="/logo.png" alt="De-tect Logo" className="w-full h-full object-cover" />
                         </div>
                         <span className="font-bold text-base text-white group-hover:text-indigo-300 transition-colors">
-                            CampusNav
+                            De-tect
                         </span>
                     </Link>
 

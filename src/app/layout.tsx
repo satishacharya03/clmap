@@ -21,14 +21,14 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "CampusNav - Smart Campus Navigation",
+  title: "De-tect - Smart Campus Navigation",
   description: "Smart Campus Navigation and Information Platform - Find your way around campus easily",
   keywords: [
     "campus", "navigation", "map", "university", "college", "places", "directions",
     "detect navigation", "cu map", "cu navigation", "chandigrah map", "chandigarh map",
     "cu campus map", "cu campus navigation", "chandigarh university map"
   ],
-  authors: [{ name: "CampusNav Team" }],
+  authors: [{ name: "De-tect Team" }],
   manifest: "/manifest.json",
   icons: {
     icon: '/logo.png',
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "CampusNav"
+    title: "De-tect"
   },
   verification: {
     google: "GPcAMvoJqIiDxD5OD-H1As13QpgXIFrcuy0sChrji6Y"
