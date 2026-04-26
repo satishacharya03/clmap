@@ -107,7 +107,7 @@ export default function AboutPage() {
                         onClick={() => {
                             const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
                             if (isStandalone) {
-                                alert("You are already using the installed CampusNav app! 🎉");
+                                alert("You are already using the CampusNav app! 🎉");
                                 return;
                             }
 
@@ -124,7 +124,7 @@ export default function AboutPage() {
                                 if (isIOS) {
                                     alert("To install on iOS: Tap the Share button (square with arrow) at the bottom, then select 'Add to Home Screen'.");
                                 } else {
-                                    alert("App is already installed on your device! Please open it from your Home Screen or App Launcher.");
+                                    alert("Install prompt not available. Please use your browser's menu (usually 3 dots at top right) and select 'Install app' or 'Add to Home screen'. If it's already installed, you can open it from your app drawer!");
                                 }
                             }
                         }}
