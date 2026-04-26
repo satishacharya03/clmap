@@ -49,6 +49,7 @@ export default function MapPage() {
     const [searchResults, setSearchResults] = useState<Place[]>([])
     const [showSearchResults, setShowSearchResults] = useState(false)
     const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
+    const [isDetailMinimized, setIsDetailMinimized] = useState(false)
     const [flyToPlace, setFlyToPlace] = useState<Place | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [currentUser, setCurrentUser] = useState<{ id: string; name: string; role: string } | null>(null)
@@ -141,6 +142,23 @@ export default function MapPage() {
         return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current) }
     }, [searchInput, places])
 
+    const getDescriptionSnippet = (desc?: string, query?: string) => {
+        if (!desc) return null;
+        const q = query?.toLowerCase() || '';
+        const d = desc.toLowerCase();
+        const words = desc.split(' ');
+        
+        if (!q || !d.includes(q)) {
+            return words.slice(0, 3).join(' ') + (words.length > 3 ? '...' : '');
+        }
+        
+        const idx = d.indexOf(q);
+        const startIdx = desc.lastIndexOf(' ', idx);
+        const snippet = desc.substring(startIdx === -1 ? 0 : startIdx + 1);
+        const snippetWords = snippet.split(' ');
+        return (startIdx > 0 ? '...' : '') + snippetWords.slice(0, 3).join(' ') + (snippetWords.length > 3 ? '...' : '');
+    };
+
     const toggleCategory = (id: string) => {
         setSelectedCategoryIds(prev =>
             prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
@@ -150,6 +168,7 @@ export default function MapPage() {
     const handlePlaceClick = async (place: Place) => {
         // Optimistically set the base place
         setSelectedPlace(place)
+        setIsDetailMinimized(false)
         setFlyToPlace(place)
         setShowSearchResults(false)
 
@@ -352,6 +371,10 @@ export default function MapPage() {
                     selectedPlace={selectedPlace}
                     onMapClick={handleMapClick}
                     onPlaceClick={handlePlaceClick}
+                    onCancelNavigation={() => {
+                        setNavigateToPlace(null);
+                        setIsDetailMinimized(false);
+                    }}
                 />
             </div>
 
@@ -399,7 +422,14 @@ export default function MapPage() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="font-semibold text-gray-800 text-sm truncate">{place.name}</p>
-                                        <p className="text-xs text-gray-400 mt-0.5">{place.category?.categoryName}</p>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <p className="text-[10px] font-medium text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md flex-shrink-0">
+                                                {place.category?.categoryName}
+                                            </p>
+                                            <p className="text-[10px] text-gray-400 truncate">
+                                                {getDescriptionSnippet(place.description, searchInput)}
+                                            </p>
+                                        </div>
                                     </div>
                                     <svg className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -468,199 +498,219 @@ export default function MapPage() {
             {/* ─── PLACE DETAIL PANEL ─── */}
             {selectedPlace && addMode === 'idle' && (
                 <div className="absolute bottom-0 left-0 right-0 md:left-4 md:bottom-4 md:right-auto z-40 md:w-96">
-                    <div className="bg-white md:rounded-3xl rounded-t-3xl shadow-[0_-8px_40px_rgba(0,0,0,0.2)] md:shadow-2xl overflow-hidden"
-                        style={{ animation: 'slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}>
-                        {/* Drag handle (mobile) */}
-                        <div className="flex justify-center pt-3 pb-1 md:hidden">
-                            <div className="w-10 h-1 bg-gray-200 rounded-full" />
-                        </div>
-
-                        <div className="px-5 pb-6 pt-2 max-h-[75vh] overflow-y-auto overflow-x-hidden">
-                            {/* Header */}
-                            <div className="flex items-start gap-3 mb-4">
-                                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-                                    style={{ background: selectedPlace.category ? getColor(selectedPlace.category.id) + '18' : '#f3f4f6' }}>
+                    {isDetailMinimized ? (
+                        <div className="bg-white px-4 py-3 md:rounded-2xl rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.2)] md:shadow-2xl flex items-center justify-between cursor-pointer transition-all hover:bg-gray-50" 
+                             onClick={() => setIsDetailMinimized(false)}
+                             style={{ animation: 'slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" 
+                                     style={{ background: selectedPlace.category ? getColor(selectedPlace.category.id) + '18' : '#f3f4f6' }}>
                                     <span>{selectedPlace.category?.icon || '📍'}</span>
                                 </div>
-                                <div className="flex-1 min-w-0 pt-1">
-                                    <h2 className="text-lg font-bold text-gray-900 leading-tight">{selectedPlace.name}</h2>
-                                    {selectedPlace.category && (
-                                        <span className="inline-flex items-center gap-1 mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold"
-                                            style={{
-                                                background: getColor(selectedPlace.category.id) + '18',
-                                                color: getColor(selectedPlace.category.id)
-                                            }}>
-                                            {selectedPlace.category.categoryName}
-                                        </span>
-                                    )}
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-gray-900 text-sm truncate max-w-[200px]">{selectedPlace.name}</span>
+                                    <span className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider">Navigating...</span>
                                 </div>
-                                <button
-                                    onClick={() => setSelectedPlace(null)}
-                                    className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all flex-shrink-0"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
+                            </div>
+                            <button onClick={(e) => { e.stopPropagation(); setSelectedPlace(null); setIsDetailMinimized(false); setNavigateToPlace(null); }} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="bg-white md:rounded-3xl rounded-t-3xl shadow-[0_-8px_40px_rgba(0,0,0,0.2)] md:shadow-2xl overflow-hidden"
+                            style={{ animation: 'slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}>
+                            {/* Drag handle (mobile) */}
+                            <div className="flex justify-center pt-3 pb-1 md:hidden" onClick={() => navigateToPlace && setIsDetailMinimized(true)}>
+                                <div className="w-10 h-1 bg-gray-200 rounded-full cursor-pointer" />
                             </div>
 
-                            {/* Description */}
-                            {selectedPlace.description && (
-                                <p className="text-sm text-gray-500 mb-4 leading-relaxed line-clamp-3">
-                                    {selectedPlace.description}
-                                </p>
-                            )}
-
-                            {/* Info chips */}
-                            <div className="flex flex-wrap gap-2 mb-5">
-                                {selectedPlace.block && (
-                                    <span className="flex items-center gap-1.5 bg-gray-50 text-gray-600 px-3 py-1.5 rounded-xl text-xs font-medium border border-gray-100">
-                                        🏢 <span>{selectedPlace.block.name}</span>
-                                    </span>
-                                )}
-                                {selectedPlace.latitude && (
-                                    <span className="flex items-center gap-1.5 bg-blue-50 text-blue-600 px-3 py-1.5 rounded-xl text-xs font-medium border border-blue-100">
-                                        📌 <span>GPS Located</span>
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Action buttons */}
-                            <div className="flex gap-2.5">
-                                <button
-                                    onClick={() => {
-                                        if (selectedPlace.latitude && selectedPlace.longitude) {
-                                            // Use a new object reference to re-trigger the effect even if same place
-                                            setNavigateToPlace({ ...selectedPlace })
-                                            setFlyToPlace(null)
-                                        }
-                                    }}
-                                    className="flex-1 py-3 text-sm font-semibold text-white rounded-xl flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
-                                    style={{ background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)', boxShadow: '0 4px 16px rgba(34,197,94,0.4)' }}
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                    </svg>
-                                    Navigate
-                                </button>
-                                <button
-                                    onClick={() => setSelectedPlace(null)}
-                                    className="px-4 py-3 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all active:scale-95"
-                                >
-                                    Close
-                                </button>
-                            </div>
-
-                            <hr className="my-5 border-gray-100" />
-
-                            {/* Photos Section */}
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="font-bold text-gray-900 text-sm">Photos</h3>
-                                    {addingPhotoPlaceId !== selectedPlace.id && (
-                                        <button
-                                            onClick={() => {
-                                                if (!currentUser) { router.push('/login?redirect=/map'); return }
-                                                setAddingPhotoPlaceId(selectedPlace.id)
-                                            }}
-                                            className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
-                                        >+ Add Photo</button>
-                                    )}
-                                </div>
-                                
-                                {addingPhotoPlaceId === selectedPlace.id && (
-                                    <div className="mb-4 bg-gray-50 rounded-xl p-3 border border-gray-100">
-                                        <ImageUpload onImageSelect={(_, b64) => setNewPhotoBase64(b64)} className="w-full h-32 rounded-lg border-2 border-dashed bg-white overflow-hidden shadow-inner mb-3 flex items-center justify-center text-xs text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors" />
-                                        <div className="flex gap-2">
-                                            <button onClick={() => {setAddingPhotoPlaceId(null); setNewPhotoBase64(null)}} className="flex-1 py-2 rounded-lg text-xs font-semibold text-gray-600 bg-white border border-gray-200">Cancel</button>
-                                            <button onClick={handleSubmitPhoto} disabled={!newPhotoBase64 || isSubmittingPhoto} className="flex-1 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 disabled:opacity-50">Upload</button>
-                                        </div>
+                            <div className="px-5 pb-6 pt-2 max-h-[75vh] overflow-y-auto overflow-x-hidden">
+                                {/* Header */}
+                                <div className="flex items-start gap-3 mb-4">
+                                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
+                                        style={{ background: selectedPlace.category ? getColor(selectedPlace.category.id) + '18' : '#f3f4f6' }}>
+                                        <span>{selectedPlace.category?.icon || '📍'}</span>
                                     </div>
-                                )}
-
-                                {selectedPlace.photos && selectedPlace.photos.length > 0 ? (
-                                    <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide -mx-5 px-5">
-                                        {selectedPlace.photos.map((photo, idx) => (
-                                            <div
-                                                key={idx}
-                                                className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100/50 cursor-pointer hover:scale-105 transition-transform"
-                                                onClick={() => setFullscreenPhotoUrl(photo.photoUrl)}
-                                            >
-                                                <img src={photo.photoUrl} alt="Location" className="w-full h-full object-cover select-none" />
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-xs text-gray-400 italic">No photos yet.</p>
-                                )}
-                            </div>
-
-                            {/* Reviews Section */}
-                            <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                        <h3 className="font-bold text-gray-900 text-sm">Reviews</h3>
-                                        {selectedPlace.reviews && selectedPlace.reviews.length > 0 && (
-                                            <span className="flex items-center gap-1 text-xs font-semibold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
-                                                ⭐ {(selectedPlace.reviews.reduce((acc, r) => acc + r.rating, 0) / selectedPlace.reviews.length).toFixed(1)} 
-                                                <span className="opacity-60 font-normal">({selectedPlace.reviews.length})</span>
+                                    <div className="flex-1 min-w-0 pt-1">
+                                        <h2 className="text-lg font-bold text-gray-900 leading-tight">{selectedPlace.name}</h2>
+                                        {selectedPlace.category && (
+                                            <span className="inline-flex items-center gap-1 mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                                                style={{
+                                                    background: getColor(selectedPlace.category.id) + '18',
+                                                    color: getColor(selectedPlace.category.id)
+                                                }}>
+                                                {selectedPlace.category.categoryName}
                                             </span>
                                         )}
                                     </div>
-                                    {reviewingPlaceId !== selectedPlace.id && (
-                                        <button
-                                            onClick={() => {
-                                                if (!currentUser) { router.push('/login?redirect=/map'); return }
-                                                setReviewingPlaceId(selectedPlace.id)
-                                            }}
-                                            className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
-                                        >Write a Review</button>
+                                    <button
+                                        onClick={() => setSelectedPlace(null)}
+                                        className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all flex-shrink-0"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                {/* Description */}
+                                {selectedPlace.description && (
+                                    <p className="text-sm text-gray-500 mb-4 leading-relaxed line-clamp-3">
+                                        {selectedPlace.description}
+                                    </p>
+                                )}
+
+                                {/* Info chips */}
+                                <div className="flex flex-wrap gap-2 mb-5">
+                                    {selectedPlace.block && (
+                                        <span className="flex items-center gap-1.5 bg-gray-50 text-gray-600 px-3 py-1.5 rounded-xl text-xs font-medium border border-gray-100">
+                                            🏢 <span>{selectedPlace.block.name}</span>
+                                        </span>
+                                    )}
+                                    {selectedPlace.latitude && (
+                                        <span className="flex items-center gap-1.5 bg-blue-50 text-blue-600 px-3 py-1.5 rounded-xl text-xs font-medium border border-blue-100">
+                                            📌 <span>GPS Located</span>
+                                        </span>
                                     )}
                                 </div>
 
-                                {reviewingPlaceId === selectedPlace.id && (
-                                    <div className="mb-5 bg-gray-50 rounded-xl p-4 border border-gray-100 shadow-sm">
-                                        <div className="flex gap-1 mb-3">
-                                            {[1,2,3,4,5].map(star => (
-                                                <button key={star} onClick={() => setReviewRating(star)} className={`text-xl transition-all ${reviewRating >= star ? 'text-amber-400 drop-shadow-sm scale-110' : 'text-gray-300'}`}>⭐</button>
+                                {/* Action buttons */}
+                                <div className="flex gap-2.5">
+                                    <button
+                                        onClick={() => {
+                                            if (selectedPlace.latitude && selectedPlace.longitude) {
+                                                setNavigateToPlace({ ...selectedPlace })
+                                                setFlyToPlace(null)
+                                                setIsDetailMinimized(true)
+                                            }
+                                        }}
+                                        className="flex-1 py-3 text-sm font-semibold text-white rounded-xl flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
+                                        style={{ background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)', boxShadow: '0 4px 16px rgba(34,197,94,0.4)' }}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                        Navigate
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedPlace(null)}
+                                        className="px-4 py-3 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all active:scale-95"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+
+                                <hr className="my-5 border-gray-100" />
+
+                                {/* Photos Section */}
+                                <div className="mb-6">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="font-bold text-gray-900 text-sm">Photos</h3>
+                                        {addingPhotoPlaceId !== selectedPlace.id && (
+                                            <button
+                                                onClick={() => {
+                                                    if (!currentUser) { router.push('/login?redirect=/map'); return }
+                                                    setAddingPhotoPlaceId(selectedPlace.id)
+                                                }}
+                                                className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
+                                            >+ Add Photo</button>
+                                        )}
+                                    </div>
+                                    
+                                    {addingPhotoPlaceId === selectedPlace.id && (
+                                        <div className="mb-4 bg-gray-50 rounded-xl p-3 border border-gray-100">
+                                            <ImageUpload onImageSelect={(_, b64) => setNewPhotoBase64(b64)} className="w-full h-32 rounded-lg border-2 border-dashed bg-white overflow-hidden shadow-inner mb-3 flex items-center justify-center text-xs text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors" />
+                                            <div className="flex gap-2">
+                                                <button onClick={() => {setAddingPhotoPlaceId(null); setNewPhotoBase64(null)}} className="flex-1 py-2 rounded-lg text-xs font-semibold text-gray-600 bg-white border border-gray-200">Cancel</button>
+                                                <button onClick={handleSubmitPhoto} disabled={!newPhotoBase64 || isSubmittingPhoto} className="flex-1 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 disabled:opacity-50">Upload</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {selectedPlace.photos && selectedPlace.photos.length > 0 ? (
+                                        <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide -mx-5 px-5">
+                                            {selectedPlace.photos.map((photo, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100/50 cursor-pointer hover:scale-105 transition-transform"
+                                                    onClick={() => setFullscreenPhotoUrl(photo.photoUrl)}
+                                                >
+                                                    <img src={photo.photoUrl} alt="Location" className="w-full h-full object-cover select-none" />
+                                                </div>
                                             ))}
                                         </div>
-                                        <textarea value={reviewComment} onChange={e => setReviewComment(e.target.value)} placeholder="Share details of your experience..." rows={3} className="w-full p-3 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 mb-3 resize-none bg-white placeholder-gray-400" />
-                                        <div className="flex gap-2">
-                                            <button onClick={() => {setReviewingPlaceId(null); setReviewComment(''); setReviewRating(5)}} className="px-4 py-2 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors">Cancel</button>
-                                            <button onClick={handleSubmitReview} disabled={!reviewComment.trim() || isSubmittingReview} className="flex-1 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 disabled:opacity-50 transition-all hover:bg-indigo-700">Submit Review</button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="space-y-4">
-                                    {selectedPlace.reviews && selectedPlace.reviews.length > 0 ? (
-                                        selectedPlace.reviews.map(review => (
-                                            <div key={review.id} className="pb-4 border-b border-gray-50 last:border-0 last:pb-0">
-                                                <div className="flex items-center justify-between mb-1.5">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 text-white flex items-center justify-center text-[10px] font-bold shadow-sm">
-                                                            {review.user.name.charAt(0).toUpperCase()}
-                                                        </div>
-                                                        <span className="font-semibold text-gray-800 text-sm">{review.user.name}</span>
-                                                        {currentUser?.id === review.user.id && (
-                                                            <span className="text-[10px] bg-indigo-50 text-indigo-500 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">You</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex text-[10px] text-amber-400 drop-shadow-sm gap-[1px]">
-                                                        {Array(5).fill(0).map((_, i) => <span key={i} className={i < review.rating ? 'opacity-100' : 'opacity-30 grayscale'}>⭐</span>)}
-                                                    </div>
-                                                </div>
-                                                <p className="text-gray-600 text-sm leading-relaxed">{review.comment}</p>
-                                            </div>
-                                        ))
                                     ) : (
-                                        <p className="text-xs text-gray-400 italic">No reviews yet. Be the first to review!</p>
+                                        <p className="text-xs text-gray-400 italic">No photos yet.</p>
                                     )}
+                                </div>
+
+                                {/* Reviews Section */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-bold text-gray-900 text-sm">Reviews</h3>
+                                            {selectedPlace.reviews && selectedPlace.reviews.length > 0 && (
+                                                <span className="flex items-center gap-1 text-xs font-semibold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
+                                                    ⭐ {(selectedPlace.reviews.reduce((acc, r) => acc + r.rating, 0) / selectedPlace.reviews.length).toFixed(1)} 
+                                                    <span className="opacity-60 font-normal">({selectedPlace.reviews.length})</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                        {reviewingPlaceId !== selectedPlace.id && (
+                                            <button
+                                                onClick={() => {
+                                                    if (!currentUser) { router.push('/login?redirect=/map'); return }
+                                                    setReviewingPlaceId(selectedPlace.id)
+                                                }}
+                                                className="text-xs text-indigo-600 font-semibold hover:text-indigo-800 transition-colors"
+                                            >Write a Review</button>
+                                        )}
+                                    </div>
+
+                                    {reviewingPlaceId === selectedPlace.id && (
+                                        <div className="mb-5 bg-gray-50 rounded-xl p-4 border border-gray-100 shadow-sm">
+                                            <div className="flex gap-1 mb-3">
+                                                {[1,2,3,4,5].map(star => (
+                                                    <button key={star} onClick={() => setReviewRating(star)} className={`text-xl transition-all ${reviewRating >= star ? 'text-amber-400 drop-shadow-sm scale-110' : 'text-gray-300'}`}>⭐</button>
+                                                ))}
+                                            </div>
+                                            <textarea value={reviewComment} onChange={e => setReviewComment(e.target.value)} placeholder="Share details of your experience..." rows={3} className="w-full p-3 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 mb-3 resize-none bg-white placeholder-gray-400" />
+                                            <div className="flex gap-2">
+                                                <button onClick={() => {setReviewingPlaceId(null); setReviewComment(''); setReviewRating(5)}} className="px-4 py-2 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors">Cancel</button>
+                                                <button onClick={handleSubmitReview} disabled={!reviewComment.trim() || isSubmittingReview} className="flex-1 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 disabled:opacity-50 transition-all hover:bg-indigo-700">Submit Review</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-4">
+                                        {selectedPlace.reviews && selectedPlace.reviews.length > 0 ? (
+                                            selectedPlace.reviews.map(review => (
+                                                <div key={review.id} className="pb-4 border-b border-gray-50 last:border-0 last:pb-0">
+                                                    <div className="flex items-center justify-between mb-1.5">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 text-white flex items-center justify-center text-[10px] font-bold shadow-sm">
+                                                                {review.user.name.charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <span className="font-semibold text-gray-800 text-sm">{review.user.name}</span>
+                                                            {currentUser?.id === review.user.id && (
+                                                                <span className="text-[10px] bg-indigo-50 text-indigo-500 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">You</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex text-[10px] text-amber-400 drop-shadow-sm gap-[1px]">
+                                                            {Array(5).fill(0).map((_, i) => <span key={i} className={i < review.rating ? 'opacity-100' : 'opacity-30 grayscale'}>⭐</span>)}
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-gray-600 text-sm leading-relaxed">{review.comment}</p>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-xs text-gray-400 italic">No reviews yet. Be the first to review!</p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 

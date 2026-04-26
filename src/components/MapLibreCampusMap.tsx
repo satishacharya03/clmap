@@ -140,6 +140,7 @@ interface Props {
     selectedPlace?: Place | null
     onMapClick?: (lat: number, lng: number) => void
     onPlaceClick?: (place: Place) => void
+    onCancelNavigation?: () => void
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -235,6 +236,7 @@ export default function MapLibreCampusMap({
     selectedPlace,
     onMapClick,
     onPlaceClick,
+    onCancelNavigation
 }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null)
     const map = useRef<maplibregl.Map | null>(null)
@@ -893,13 +895,13 @@ export default function MapLibreCampusMap({
         } catch (err) { console.error('Routing error', err); if (animate) setNavStatus('error') }
     }, [stopWalker])
 
-    // Clear route when place is deselected, but do NOT auto-draw on select.
+    // Clear route when both place and navigateToPlace are cleared
     useEffect(() => {
-        if (!selectedPlace?.latitude || !selectedPlace?.longitude) {
+        if (!selectedPlace && !navigateToPlace) {
             handleRemoveRoute()
             stopWalker()
         }
-    }, [selectedPlace, handleRemoveRoute, stopWalker])
+    }, [selectedPlace, navigateToPlace, handleRemoveRoute, stopWalker])
 
     useEffect(() => {
         if (!navigateToPlace?.latitude || !navigateToPlace?.longitude) return
@@ -928,7 +930,7 @@ export default function MapLibreCampusMap({
                     {navStatus === 'locating' && <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-2.5"><div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /><span className="text-xs font-semibold">Getting location…</span></div>}
                     {navStatus === 'routing' && <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-2.5"><div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" /><span className="text-xs font-semibold">Calculating route…</span></div>}
                     {navStatus === 'walking' && (
-                        <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-green-500/30 flex items-center justify-between gap-4">
+                        <div className="bg-gray-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-green-500/30 flex items-center justify-between gap-4 pointer-events-auto">
                             <div className="flex items-center gap-2.5">
                                 <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.8)]" />
                                 <span className="text-xs font-semibold text-green-400">Navigating live…</span>
@@ -939,6 +941,17 @@ export default function MapLibreCampusMap({
                                     <span className="text-xs text-white/70">{Math.round(navStats.dist)} m</span>
                                 </div>
                             )}
+                            <button 
+                                onClick={() => {
+                                    handleRemoveRoute();
+                                    stopWalker();
+                                    setNavStatus('idle');
+                                    onCancelNavigation?.();
+                                }}
+                                className="bg-red-500/20 hover:bg-red-500/40 text-red-400 text-[10px] font-bold px-2 py-1 rounded-lg transition-colors border border-red-500/30"
+                            >
+                                Cancel
+                            </button>
                         </div>
                     )}
                     {navStatus === 'error' && <div className="bg-red-900/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border border-red-500/30 flex items-center gap-2.5"><span className="text-sm">⚠️</span><span className="text-xs font-semibold">Location error. Enable GPS.</span></div>}
