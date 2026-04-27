@@ -136,19 +136,54 @@ export async function isAdmin() {
 }
 
 /**
- * Query neon_auth.users directly — the authoritative source for email_verified.
- * The session JWT may lag behind; the DB is always up to date after verification.
+ * Query neon_auth.users directly — the authoritative source for email verification.
+ * Neon Auth stores user data in a raw_json JSONB column; we try every known key name.
  */
 async function getNeonAuthVerifiedStatus(userId: string): Promise<boolean | null> {
     try {
+        // Fetch the full raw_json + any top-level columns that might exist
         const { rows } = await pool.query(
-            'SELECT email_verified FROM neon_auth.users WHERE id = $1 LIMIT 1',
+            `SELECT
+                raw_json,
+                raw_json->>'emailVerified'            AS ev1,
+                raw_json->>'email_verified'           AS ev2,
+                raw_json->>'primaryEmailVerified'     AS ev3,
+                raw_json->'primaryEmail'->>'verified' AS ev4
+             FROM neon_auth.users WHERE id = $1 LIMIT 1`,
             [userId]
         )
-        if (rows.length === 0) return null
-        return rows[0].email_verified === true
+
+        if (rows.length === 0) {
+            console.warn(`[AuthSync] neon_auth.users: no row for userId=${userId}`)
+            return null
+        }
+
+        const r = rows[0]
+        console.log(`[AuthSync] neon_auth.users raw for ${userId}:`, JSON.stringify({
+            ev1: r.ev1, ev2: r.ev2, ev3: r.ev3, ev4: r.ev4,
+            raw_json_keys: r.raw_json ? Object.keys(r.raw_json) : []
+        }))
+
+        // Return true if ANY of the known fields is truthy
+        if (r.ev1 === 'true' || r.ev1 === true) return true
+        if (r.ev2 === 'true' || r.ev2 === true) return true
+        if (r.ev3 === 'true' || r.ev3 === true) return true
+        if (r.ev4 === 'true' || r.ev4 === true) return true
+
+        // Last resort: scan the entire raw_json for any verification-related key
+        if (r.raw_json) {
+            const json = r.raw_json as Record<string, unknown>
+            for (const key of Object.keys(json)) {
+                if (key.toLowerCase().includes('verif') && json[key] === true) {
+                    console.log(`[AuthSync] Found verified via raw_json key: ${key}`)
+                    return true
+                }
+            }
+        }
+
+        return false
     } catch (err) {
-        console.warn('[AuthSync] Could not query neon_auth.users (will fall back to session):', err)
+        console.warn('[AuthSync] Could not query neon_auth.users:', err)
         return null
     }
 }

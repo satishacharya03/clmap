@@ -15,45 +15,22 @@ export default function ProfilePage() {
     const [stats, setStats] = useState<{ places: number; reviews: number } | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [verificationStatus, setVerificationStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
-    const [justVerified, setJustVerified] = useState(false)
-
-    const fetchUser = async () => {
-        try {
-            const r = await fetch('/api/auth/me', { cache: 'no-store' })
-            if (!r.ok) { router.push('/login'); return null }
-            const d = await r.json()
-            if (!d.user) { router.push('/login'); return null }
-            setUser(d.user)
-            fetch('/api/auth/stats').then(r => r.ok ? r.json() : null).then(d => d?.stats && setStats(d.stats))
-            return d.user as User
-        } catch {
-            router.push('/login')
-            return null
-        }
-    }
 
     useEffect(() => {
-        (async () => {
-            setIsLoading(true)
-            const fetchedUser = await fetchUser()
-
-            // If user is unverified, immediately check neon_auth.users source of truth
-            if (fetchedUser && !fetchedUser.emailVerified) {
-                try {
-                    const res = await fetch('/api/auth/sync-verification', { method: 'POST' })
-                    const data = await res.json().catch(() => ({}))
-                    if (data?.verified) {
-                        // Neon Auth has them as verified — re-fetch to get updated DB record
-                        setJustVerified(true)
-                        await fetchUser()
-                        setTimeout(() => setJustVerified(false), 6000)
-                    }
-                } catch (e) {
-                    console.error('Sync verification failed:', e)
+        fetch('/api/auth/me', { cache: 'no-store' })
+            .then(r => { if (!r.ok) throw new Error(); return r.json() })
+            .then(d => {
+                if (d.user) {
+                    setUser(d.user)
+                    fetch('/api/auth/stats')
+                        .then(r => r.ok ? r.json() : null)
+                        .then(d => d?.stats && setStats(d.stats))
+                } else {
+                    router.push('/login')
                 }
-            }
-            setIsLoading(false)
-        })()
+            })
+            .catch(() => router.push('/login'))
+            .finally(() => setIsLoading(false))
     }, [])
 
     const handleLogout = async () => {
@@ -120,20 +97,8 @@ export default function ProfilePage() {
 
             <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-16">
 
-                {/* ── SUCCESS BANNER (just verified) ── */}
-                {justVerified && (
-                    <div className="mb-6 rounded-2xl px-4 sm:px-5 py-4 flex items-center gap-3"
-                        style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)' }}>
-                        <span className="text-xl">✅</span>
-                        <div>
-                            <p className="text-sm font-semibold" style={{ color: '#10b981' }}>Email verified successfully!</p>
-                            <p className="text-xs mt-0.5" style={{ color: 'var(--cn-text-2)' }}>You can now contribute places and write reviews.</p>
-                        </div>
-                    </div>
-                )}
-
                 {/* ── PENDING VERIFICATION BANNER ── */}
-                {user.emailVerified === false && !justVerified && (
+                {user.emailVerified === false && (
                     <div className="mb-6 rounded-2xl px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
                         style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
                         <div>
