@@ -1,11 +1,8 @@
 
 
 import { NextRequest, NextResponse } from 'next/server'
-import { Pool } from '@neondatabase/serverless'
+import { pool } from '@/lib/edge-db'
 import { getCurrentUser } from '@/lib/auth'
-
-// Initialize Neon Pool
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 // GET /api/places/[id] - Get place details
 export async function GET(
@@ -76,7 +73,11 @@ export async function GET(
             )
         }
 
-        return NextResponse.json({ place })
+        return NextResponse.json({ place }, {
+            headers: {
+                'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
+            }
+        })
     } catch (error) {
         console.error('Error fetching place:', error)
         return NextResponse.json(

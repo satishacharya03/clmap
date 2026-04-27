@@ -116,6 +116,7 @@ export interface Place {
         id: string
         name: string
     }
+    mainPhoto?: string
     photos?: { photoUrl: string }[]
     reviews?: { id: string; rating: number; comment: string; createdAt: string; user: { name: string, id: string } }[]
     approvalStatus: string

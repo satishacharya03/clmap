@@ -85,6 +85,7 @@ export default function MapPage() {
     const [isDetailLoading, setIsDetailLoading] = useState(false)
 
     const catColorMap = useRef<Map<string, string>>(new Map())
+    const fullPlaceCache = useRef<Map<string, Place>>(new Map())
     const searchTimeout = useRef<NodeJS.Timeout | null>(null)
 
     const getColor = (catId: string) => {
@@ -167,6 +168,14 @@ export default function MapPage() {
     }
 
     const handlePlaceClick = async (place: Place) => {
+        // Check cache first
+        if (fullPlaceCache.current.has(place.id)) {
+            setSelectedPlace(fullPlaceCache.current.get(place.id)!)
+            setFlyToPlace(place)
+            setShowSearchResults(false)
+            return
+        }
+
         // Optimistically set the base place
         setSelectedPlace(place)
         setFlyToPlace(place)
@@ -179,6 +188,8 @@ export default function MapPage() {
             if (res.ok) {
                 const data = await res.json()
                 setSelectedPlace(data.place)
+                // Cache it
+                fullPlaceCache.current.set(place.id, data.place)
             }
         } catch (e) {
             console.error('Failed to fetch detailed place data', e)
@@ -639,29 +650,51 @@ export default function MapPage() {
                                         </div>
                                     )}
 
-                                    {isDetailLoading ? (
+                                    {isDetailLoading && !selectedPlace.mainPhoto ? (
                                         <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide -mx-5 px-5">
                                             {[1, 2, 3].map((i: number) => (
                                                 <div key={i} className="w-28 h-28 flex-shrink-0 rounded-xl bg-gray-100 animate-pulse" />
                                             ))}
                                         </div>
-                                    ) : selectedPlace.photos && selectedPlace.photos.length > 0 ? (
+                                    ) : (selectedPlace.photos && selectedPlace.photos.length > 0) || selectedPlace.mainPhoto ? (
                                         <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide -mx-5 px-5">
-                                            {selectedPlace.photos.map((photo, idx) => (
-                                                <div
-                                                    key={idx}
-                                                    className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100/50 cursor-pointer hover:scale-105 transition-transform relative"
-                                                    onClick={() => setFullscreenPhotoUrl(photo.photoUrl)}
-                                                >
-                                                    <Image
-                                                        src={photo.photoUrl}
-                                                        alt="Location"
-                                                        fill
-                                                        className="object-cover select-none"
-                                                        sizes="112px"
-                                                    />
-                                                </div>
-                                            ))}
+                                            {/* If we have full photos, show them all */}
+                                            {selectedPlace.photos && selectedPlace.photos.length > 0 ? (
+                                                selectedPlace.photos.map((photo, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100/50 cursor-pointer hover:scale-105 transition-transform relative"
+                                                        onClick={() => setFullscreenPhotoUrl(photo.photoUrl)}
+                                                    >
+                                                        <Image
+                                                            src={photo.photoUrl}
+                                                            alt="Location"
+                                                            fill
+                                                            className="object-cover select-none"
+                                                            sizes="112px"
+                                                        />
+                                                    </div>
+                                                ))
+                                            ) : selectedPlace.mainPhoto ? (
+                                                /* If we only have mainPhoto (initial load), show it + skeletons */
+                                                <>
+                                                    <div
+                                                        className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100/50 cursor-pointer hover:scale-105 transition-transform relative"
+                                                        onClick={() => setFullscreenPhotoUrl(selectedPlace.mainPhoto!)}
+                                                    >
+                                                        <Image
+                                                            src={selectedPlace.mainPhoto}
+                                                            alt="Location"
+                                                            fill
+                                                            className="object-cover select-none"
+                                                            sizes="112px"
+                                                        />
+                                                    </div>
+                                                    {isDetailLoading && [1, 2].map(i => (
+                                                        <div key={i} className="w-28 h-28 flex-shrink-0 rounded-xl bg-gray-100 animate-pulse" />
+                                                    ))}
+                                                </>
+                                            ) : null}
                                         </div>
                                     ) : (
                                         <p className="text-xs text-gray-400 italic">No photos yet.</p>
