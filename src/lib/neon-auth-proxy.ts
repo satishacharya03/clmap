@@ -13,10 +13,13 @@ export async function postToNeonAuthProxy<T>(
     body: Record<string, unknown>
 ): Promise<NeonProxyResult<T>> {
     const origin = getCanonicalAppOrigin(request)
+    const cookieHeader = request.headers.get('cookie') || ''
+
     const response = await fetch(`${origin}/api/auth/${path}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'Cookie': cookieHeader,
             Origin: origin,
             Referer: `${origin}${request.nextUrl.pathname}`,
         },
