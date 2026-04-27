@@ -1,6 +1,6 @@
 import { createNeonAuth } from '@neondatabase/auth/next/server';
 import { cookies } from 'next/headers';
-import prisma from './db';
+import { pool } from './edge-db';
 import { verifyToken } from './auth-credentials';
 // Next.js handles .env loading automatically.
 
@@ -84,20 +84,14 @@ async function getCredentialsCurrentUser() {
         const payload = await verifyToken(token);
         if (!payload?.email) return null;
 
-        const dbUser = await prisma.user.findUnique({
-            where: { email: normalizeEmail(payload.email) },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                image: true,
-                emailVerified: true,
-                role: true,
-            }
-        })
+        const { rows } = await pool.query(
+            'SELECT id, name, email, image, "emailVerified", role FROM users WHERE email = $1 LIMIT 1',
+            [normalizeEmail(payload.email)]
+        )
+        const dbUser = (rows[0] as DbUser | undefined) ?? null
 
         if (!dbUser) return null;
-        return mapDbUserToAppUser(dbUser as DbUser, {
+        return mapDbUserToAppUser(dbUser, {
             id: payload.userId,
             email: payload.email,
             emailVerified: false,
@@ -155,14 +149,11 @@ export async function getOrCreateDbUser(neonUser: NeonAuthUser) {
         const normalizedEmail = normalizeEmail(neonUser.email)
         console.log(`[AuthSync] Syncing user: ${normalizedEmail}. NeonVerified: ${neonUser.emailVerified}`);
 
-        const existing = await prisma.user.findFirst({
-            where: {
-                OR: [
-                    { email: normalizedEmail },
-                    { id: neonUser.id }
-                ]
-            }
-        })
+        const { rows } = await pool.query(
+            'SELECT id, name, email, image, "emailVerified", role FROM users WHERE email = $1 OR id = $2 LIMIT 1',
+            [normalizedEmail, neonUser.id]
+        )
+        const existing = (rows[0] as DbUser | undefined) ?? null
 
         if (existing) {
             console.log(`[AuthSync] Found existing user: ${normalizedEmail}. DBVerified: ${existing.emailVerified}`);
@@ -178,34 +169,30 @@ export async function getOrCreateDbUser(neonUser: NeonAuthUser) {
                 existing.image !== nextImage
             ) {
                 console.log(`[AuthSync] Updating user: ${normalizedEmail}. Changing verified to: ${nextEmailVerified}`);
-                const updated = await prisma.user.update({
-                    where: { id: existing.id },
-                    data: {
-                        email: normalizedEmail,
-                        name: nextName,
-                        image: nextImage,
-                        emailVerified: nextEmailVerified,
-                        updatedAt: new Date()
-                    }
-                })
-                return updated as DbUser;
+                const updateResult = await pool.query(
+                    'UPDATE users SET email = $1, name = $2, image = $3, "emailVerified" = $4, "updatedAt" = NOW() WHERE id = $5 RETURNING id, name, email, image, "emailVerified", role',
+                    [normalizedEmail, nextName, nextImage, nextEmailVerified, existing.id]
+                )
+                return (updateResult.rows[0] as DbUser | undefined) ?? existing
             }
-            return existing as DbUser;
+            return existing;
         }
 
         console.log(`[AuthSync] Provisioning NEW user: ${normalizedEmail}`);
-        const newUser = await prisma.user.create({
-            data: {
-                id: neonUser.id,
-                name: neonUser.name ?? neonUser.email.split('@')[0],
-                email: normalizedEmail,
-                emailVerified: neonUser.emailVerified ?? false,
-                image: neonUser.image ?? neonUser.picture ?? null,
-                role: 'USER'
-            }
-        })
+        const insertResult = await pool.query(
+            'INSERT INTO users (id, name, email, "emailVerified", image, role, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) RETURNING id, name, email, image, "emailVerified", role',
+            [
+                neonUser.id,
+                neonUser.name ?? neonUser.email.split('@')[0],
+                normalizedEmail,
+                neonUser.emailVerified ?? false,
+                neonUser.image ?? neonUser.picture ?? null,
+                'USER',
+            ]
+        )
+        const newUser = (insertResult.rows[0] as DbUser | undefined) ?? null
         console.log(`[AuthSync] Successfully created user: ${normalizedEmail}`);
-        return newUser as DbUser;
+        return newUser;
     } catch (err) {
         console.error("[AuthSync] Error in getOrCreateDbUser:", err);
         return null;
