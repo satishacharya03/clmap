@@ -72,40 +72,26 @@ export default function RegisterPage() {
     const [info, setInfo] = useState('')
     const [isLoading, setIsLoading] = useState(false)
 
+    // ── Email/Password registration via Neon Auth ─────────────────────────────
     const handleRegister = async (e: FormEvent) => {
         e.preventDefault()
         setError('')
         setInfo('')
-        if (password !== confirmPassword) {
-            setError('Passwords do not match')
-            return
-        }
-        if (password.length < 8) {
-            setError('Password must be at least 8 characters')
-            return
-        }
+        if (password !== confirmPassword) { setError('Passwords do not match'); return }
+        if (password.length < 8) { setError('Password must be at least 8 characters'); return }
+
         setIsLoading(true)
         try {
-            const response = await fetch('/api/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name,
-                    email,
-                    password,
-                }),
+            const { error: authError } = await authClient.signUp.email({
+                email,
+                password,
+                name,
+                callbackURL: '/profile',
             })
+            if (authError) throw new Error(authError.message || 'Registration failed')
 
-            const result = await response.json().catch(() => null)
-            if (!response.ok) {
-                throw new Error(result?.error || 'Registration failed')
-            }
-
-            setInfo('Account created. Check your inbox for the verification email.')
-            setTimeout(() => {
-                router.push('/profile')
-                router.refresh()
-            }, 900)
+            setInfo('Account created! Check your inbox for the verification email.')
+            setTimeout(() => { router.push('/profile'); router.refresh() }, 1200)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Registration failed')
         } finally {
@@ -113,15 +99,13 @@ export default function RegisterPage() {
         }
     }
 
+    // ── Google via Neon Auth ──────────────────────────────────────────────────
     const handleGoogle = async () => {
         setError('')
         setInfo('')
         setIsLoading(true)
         try {
-            await authClient.signIn.social({
-                provider: 'google',
-                callbackURL: '/map',
-            })
+            await authClient.signIn.social({ provider: 'google', callbackURL: '/map' })
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Google sign-in failed.')
             setIsLoading(false)
@@ -166,46 +150,10 @@ export default function RegisterPage() {
                     <h2 className="text-xl font-bold text-white mb-6">Create your account</h2>
 
                     <form onSubmit={handleRegister} className="space-y-4">
-                        <Field
-                            label="Full Name"
-                            type="text"
-                            value={name}
-                            onChange={e => setName(e.target.value)}
-                            required
-                            placeholder="Your full name"
-                            autoComplete="name"
-                        />
-                        <Field
-                            label="Email"
-                            type="email"
-                            value={email}
-                            onChange={e => setEmail(e.target.value)}
-                            required
-                            placeholder="you@campus.edu"
-                            autoComplete="email"
-                        />
-                        <Field
-                            label="Password"
-                            type={showPassword ? 'text' : 'password'}
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            required
-                            placeholder="Min. 8 characters"
-                            autoComplete="new-password"
-                            showPassword={showPassword}
-                            onTogglePassword={() => setShowPassword(!showPassword)}
-                        />
-                        <Field
-                            label="Confirm Password"
-                            type={showConfirmPassword ? 'text' : 'password'}
-                            value={confirmPassword}
-                            onChange={e => setConfirmPassword(e.target.value)}
-                            required
-                            placeholder="••••••••"
-                            autoComplete="new-password"
-                            showPassword={showConfirmPassword}
-                            onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
-                        />
+                        <Field label="Full Name" type="text" value={name} onChange={e => setName(e.target.value)} required placeholder="Your full name" autoComplete="name" />
+                        <Field label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="you@campus.edu" autoComplete="email" />
+                        <Field label="Password" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} required placeholder="Min. 8 characters" autoComplete="new-password" showPassword={showPassword} onTogglePassword={() => setShowPassword(!showPassword)} />
+                        <Field label="Confirm Password" type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required placeholder="••••••••" autoComplete="new-password" showPassword={showConfirmPassword} onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)} />
 
                         <button
                             type="submit"
@@ -239,9 +187,7 @@ export default function RegisterPage() {
                     <div className="mt-6 text-center">
                         <p className="text-white/40 text-sm">
                             Already have an account?{' '}
-                            <Link href="/login" className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">
-                                Sign in
-                            </Link>
+                            <Link href="/login" className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">Sign in</Link>
                         </p>
                     </div>
                 </div>

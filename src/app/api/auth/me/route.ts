@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getCurrentUser, type AppCurrentUser } from '@/lib/auth'
+import { getCurrentUser } from '@/lib/auth'
 
-// GET /api/auth/me — returns current user + role from our DB
+// GET /api/auth/me — returns current Neon Auth user synced with our DB
 export const dynamic = 'force-dynamic'
+
 export async function GET() {
     try {
         const user = await getCurrentUser()
@@ -11,17 +12,14 @@ export async function GET() {
             return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
         }
 
-        const appUser: AppCurrentUser = user
-
         return NextResponse.json({
             user: {
-                id: appUser.id,
-                name: appUser.name,
-                email: appUser.email,
-                image: appUser.image,
-                emailVerified: appUser.emailVerified,
-                role: appUser.role,
-                authMethod: appUser.authMethod,
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                image: user.image,
+                emailVerified: user.emailVerified,
+                role: user.role,
             }
         })
     } catch (error) {

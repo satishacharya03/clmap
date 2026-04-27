@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { authClient } from '@/lib/auth-client'
 
-// ─── Google Icon ─────────────────────────────────────────────────────────────
 function GoogleIcon() {
     return (
         <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -17,7 +16,6 @@ function GoogleIcon() {
     )
 }
 
-// ─── Spinner ─────────────────────────────────────────────────────────────────
 function Spinner() {
     return (
         <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
@@ -61,7 +59,6 @@ function Field({ label, onTogglePassword, showPassword, ...props }: { label: str
     )
 }
 
-// ─── Main Form ────────────────────────────────────────────────────────────────
 function LoginForm() {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -73,25 +70,18 @@ function LoginForm() {
     const [error, setError] = useState('')
     const [isLoading, setIsLoading] = useState(false)
 
+    // ── Email/Password via Neon Auth ──────────────────────────────────────────
     const handleEmailLogin = async (e: FormEvent) => {
         e.preventDefault()
         setError('')
         setIsLoading(true)
         try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email,
-                    password,
-                }),
+            const { error: authError } = await authClient.signIn.email({
+                email,
+                password,
+                callbackURL: redirectTo,
             })
-
-            const result = await response.json().catch(() => null)
-            if (!response.ok) {
-                throw new Error(result?.error || 'Invalid email or password')
-            }
-
+            if (authError) throw new Error(authError.message || 'Invalid email or password')
             router.push(redirectTo)
             router.refresh()
         } catch (err) {
@@ -101,6 +91,7 @@ function LoginForm() {
         }
     }
 
+    // ── Google via Neon Auth ──────────────────────────────────────────────────
     const handleGoogleSignIn = async () => {
         setError('')
         setIsLoading(true)
@@ -120,14 +111,12 @@ function LoginForm() {
             className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
             style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' }}
         >
-            {/* Ambient glows */}
             <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full pointer-events-none"
                 style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.15), transparent)' }} />
             <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full pointer-events-none"
                 style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.15), transparent)' }} />
 
             <div className="w-full max-w-md relative z-10">
-                {/* Logo */}
                 <div className="text-center mb-8">
                     <Link href="/map" className="inline-block transition-transform hover:scale-105 active:scale-95">
                         <img src="/logo.png" alt="De-tect"
@@ -138,11 +127,9 @@ function LoginForm() {
                     <p className="text-white/40 mt-1 text-sm">Chandigarh University · Smart Map</p>
                 </div>
 
-                {/* Card */}
                 <div className="rounded-3xl p-8"
                     style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', backdropFilter: 'blur(24px)' }}>
 
-                    {/* Error / Info banners */}
                     {error && (
                         <div className="mb-5 flex items-start gap-2.5 bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-red-300 text-sm">
                             <span className="mt-0.5 text-base">⚠️</span> {error}
