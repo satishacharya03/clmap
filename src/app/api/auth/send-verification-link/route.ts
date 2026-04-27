@@ -5,50 +5,44 @@ import { postToNeonAuthProxy } from '@/lib/neon-auth-proxy'
 
 export async function POST(request: NextRequest) {
     try {
-        const user = await getCurrentUser()
-        if (!user) {
-            return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-        }
-
-        if (user.emailVerified) {
-            return NextResponse.json({ success: true, message: 'Email already verified' })
-        }
-
         const body = await request.json().catch(() => ({}))
+        const user = await getCurrentUser()
+        
+        // Use email from body if provided (for public resend), otherwise use logged-in user's email
+        const targetEmail = body?.email || user?.email
+
+        if (!targetEmail) {
+            return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+        }
+
         const callbackURL = normalizeAppCallbackURL(request, body?.callbackURL, '/profile')
 
-        console.log(`[ResendAuth] Attempting to resend verification to: ${user.email}`);
+        console.log(`[ResendAuth] Attempting to resend verification to: ${targetEmail}`);
 
-        // Try the standard Better Auth 1.0 endpoint first
+        // Try the standard Neon Auth / Better Auth endpoints
         let result = await postToNeonAuthProxy<{
             message?: string
             code?: string
         }>(request, 'verify-email/send-verification-email', {
-            email: user.email,
+            email: targetEmail,
             callbackURL,
         })
 
-        // If that fails, try the alternative endpoint path
+        // Fallback for different Neon Auth versions
         if (!result.ok) {
-            console.warn(`[ResendAuth] Primary endpoint failed (${result.status}), trying alternative...`);
             result = await postToNeonAuthProxy<{
                 message?: string
                 code?: string
             }>(request, 'send-verification-email', {
-                email: user.email,
+                email: targetEmail,
                 callbackURL,
             })
         }
 
         if (!result.ok) {
             const errorMsg = result.data?.message || result.data?.code || 'Neon Auth error';
-            console.error(`[ResendAuth] Both endpoints failed. Last error: ${errorMsg} (Status: ${result.status})`);
-            
             return NextResponse.json(
-                {
-                    error: errorMsg,
-                    details: 'Check if you are signed in or if the email is correct.',
-                },
+                { error: errorMsg },
                 { status: result.status >= 400 ? result.status : 400 }
             )
         }

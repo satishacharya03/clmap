@@ -68,7 +68,33 @@ function LoginForm() {
     const [password, setPassword] = useState('')
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState('')
+    const [info, setInfo] = useState('')
     const [isLoading, setIsLoading] = useState(false)
+    const [isResending, setIsResending] = useState(false)
+
+    const handleResendLink = async () => {
+        if (!email) {
+            setError('Please enter your email address first.')
+            return
+        }
+        setError('')
+        setInfo('')
+        setIsResending(true)
+        try {
+            const res = await fetch('/api/auth/send-verification-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, callbackURL: '/profile' }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Failed to send link')
+            setInfo('Verification link resent! Check your inbox.')
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to resend link')
+        } finally {
+            setIsResending(false)
+        }
+    }
 
     // ── Email/Password via Neon Auth ──────────────────────────────────────────
     const handleEmailLogin = async (e: FormEvent) => {
@@ -132,7 +158,25 @@ function LoginForm() {
 
                     {error && (
                         <div className="mb-5 flex items-start gap-2.5 bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-red-300 text-sm">
-                            <span className="mt-0.5 text-base">⚠️</span> {error}
+                            <span className="mt-0.5 text-base">⚠️</span>
+                            <div className="flex-1">
+                                {error}
+                                {error.toLowerCase().includes('verify') && (
+                                    <button 
+                                        onClick={handleResendLink}
+                                        type="button"
+                                        className="block mt-2 text-indigo-400 font-bold hover:underline"
+                                    >
+                                        Resend verification link?
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {info && (
+                        <div className="mb-5 flex items-start gap-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-4 text-indigo-300 text-sm">
+                            <span className="mt-0.5 text-base">📧</span> {info}
                         </div>
                     )}
 
@@ -159,6 +203,17 @@ function LoginForm() {
                             showPassword={showPassword}
                             onTogglePassword={() => setShowPassword(!showPassword)}
                         />
+
+                        <div className="flex justify-end">
+                            <button 
+                                type="button" 
+                                onClick={handleResendLink}
+                                disabled={isResending}
+                                className="text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-50"
+                            >
+                                {isResending ? 'Sending...' : 'Lost verification email? Resend'}
+                            </button>
+                        </div>
 
                         <button
                             type="submit"
