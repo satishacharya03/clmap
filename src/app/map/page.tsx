@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import type { Place, Category } from '@/components/MapLibreCampusMap'
 import ImageUpload from '@/components/ImageUpload'
@@ -81,6 +82,7 @@ export default function MapPage() {
     const [newPhotoBase64, setNewPhotoBase64] = useState<string | null>(null)
     const [isSubmittingPhoto, setIsSubmittingPhoto] = useState(false)
     const [fullscreenPhotoUrl, setFullscreenPhotoUrl] = useState<string | null>(null)
+    const [isDetailLoading, setIsDetailLoading] = useState(false)
 
     const catColorMap = useRef<Map<string, string>>(new Map())
     const searchTimeout = useRef<NodeJS.Timeout | null>(null)
@@ -169,6 +171,7 @@ export default function MapPage() {
         setSelectedPlace(place)
         setFlyToPlace(place)
         setShowSearchResults(false)
+        setIsDetailLoading(true)
 
         // Fetch deep relations (photos, reviews) asynchronously
         try {
@@ -179,6 +182,8 @@ export default function MapPage() {
             }
         } catch (e) {
             console.error('Failed to fetch detailed place data', e)
+        } finally {
+            setIsDetailLoading(false)
         }
     }
 
@@ -634,15 +639,27 @@ export default function MapPage() {
                                         </div>
                                     )}
 
-                                    {selectedPlace.photos && selectedPlace.photos.length > 0 ? (
+                                    {isDetailLoading ? (
+                                        <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide -mx-5 px-5">
+                                            {[1, 2, 3].map((i: number) => (
+                                                <div key={i} className="w-28 h-28 flex-shrink-0 rounded-xl bg-gray-100 animate-pulse" />
+                                            ))}
+                                        </div>
+                                    ) : selectedPlace.photos && selectedPlace.photos.length > 0 ? (
                                         <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide -mx-5 px-5">
                                             {selectedPlace.photos.map((photo, idx) => (
                                                 <div
                                                     key={idx}
-                                                    className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100/50 cursor-pointer hover:scale-105 transition-transform"
+                                                    className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100/50 cursor-pointer hover:scale-105 transition-transform relative"
                                                     onClick={() => setFullscreenPhotoUrl(photo.photoUrl)}
                                                 >
-                                                    <img src={photo.photoUrl} alt="Location" className="w-full h-full object-cover select-none" />
+                                                    <Image
+                                                        src={photo.photoUrl}
+                                                        alt="Location"
+                                                        fill
+                                                        className="object-cover select-none"
+                                                        sizes="112px"
+                                                    />
                                                 </div>
                                             ))}
                                         </div>
@@ -694,7 +711,18 @@ export default function MapPage() {
                                     )}
 
                                     <div className="space-y-4">
-                                        {selectedPlace.reviews && selectedPlace.reviews.length > 0 ? (
+                                        {isDetailLoading ? (
+                                            [1, 2].map((i: number) => (
+                                                <div key={i} className="pb-4 border-b border-gray-50 last:border-0 last:pb-0 animate-pulse">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <div className="w-6 h-6 rounded-full bg-gray-100" />
+                                                        <div className="h-3 w-20 bg-gray-100 rounded" />
+                                                    </div>
+                                                    <div className="h-3 w-full bg-gray-100 rounded mb-1" />
+                                                    <div className="h-3 w-2/3 bg-gray-100 rounded" />
+                                                </div>
+                                            ))
+                                        ) : selectedPlace.reviews && selectedPlace.reviews.length > 0 ? (
                                             selectedPlace.reviews.map(review => (
                                                 <div key={review.id} className="pb-4 border-b border-gray-50 last:border-0 last:pb-0">
                                                     <div className="flex items-center justify-between mb-1.5">
@@ -1015,12 +1043,16 @@ export default function MapPage() {
                     onClick={() => setFullscreenPhotoUrl(null)}
                 >
                     <div className="relative inline-flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                        <img
-                            src={fullscreenPhotoUrl}
-                            alt="Full view"
-                            className="h-[50vh] md:h-[65vh] w-auto max-w-[95vw] rounded-2xl shadow-2xl object-contain select-none"
-                            style={{ border: '1px solid rgba(255,255,255,0.15)' }}
-                        />
+                        <div className="relative h-[50vh] md:h-[65vh] aspect-[4/3] md:aspect-video w-auto max-w-[95vw]">
+                            <Image
+                                src={fullscreenPhotoUrl}
+                                alt="Full view"
+                                fill
+                                className="rounded-2xl shadow-2xl object-contain select-none"
+                                style={{ border: '1px solid rgba(255,255,255,0.15)' }}
+                                priority
+                            />
+                        </div>
                         <button
                             onClick={() => setFullscreenPhotoUrl(null)}
                             className="absolute -top-4 -right-4 w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-xl transition-all hover:scale-110 z-[110]"

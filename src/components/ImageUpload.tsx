@@ -2,6 +2,7 @@
 
 import { useState, useRef, ChangeEvent } from 'react'
 import Image from 'next/image'
+import { compressImage } from '@/utils/image-compression'
 
 interface ImageUploadProps {
     onImageSelect: (file: File | null, base64: string | null) => void
@@ -16,6 +17,7 @@ export default function ImageUpload({
 }: ImageUploadProps) {
     const [preview, setPreview] = useState<string | null>(currentImage || null)
     const [isDragging, setIsDragging] = useState(false)
+    const [isCompressing, setIsCompressing] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -25,24 +27,30 @@ export default function ImageUpload({
         }
     }
 
-    const handleFile = (file: File) => {
+    const handleFile = async (file: File) => {
         if (!file.type.startsWith('image/')) {
             alert('Please upload an image file')
             return
         }
 
-        if (file.size > 1 * 1024 * 1024) {
-            alert('Image must be less than 1MB')
-            return
+        setIsCompressing(true)
+        try {
+            const compressedB64 = await compressImage(file)
+            setPreview(compressedB64)
+            onImageSelect(file, compressedB64)
+        } catch (error) {
+            console.error('Compression failed:', error)
+            // Fallback to original if compression fails (though unlikely)
+            const reader = new FileReader()
+            reader.onload = (e) => {
+                const b64 = e.target?.result as string
+                setPreview(b64)
+                onImageSelect(file, b64)
+            }
+            reader.readAsDataURL(file)
+        } finally {
+            setIsCompressing(false)
         }
-
-        const reader = new FileReader()
-        reader.onload = (e) => {
-            const b64 = e.target?.result as string
-            setPreview(b64)
-            onImageSelect(file, b64)
-        }
-        reader.readAsDataURL(file)
     }
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -102,6 +110,13 @@ export default function ImageUpload({
                     }
         `}
             >
+                {isCompressing ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-10">
+                        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-2" />
+                        <p className="text-xs font-semibold text-indigo-600">Optimizing...</p>
+                    </div>
+                ) : null}
+
                 {preview ? (
                     <>
                         <Image
@@ -130,7 +145,7 @@ export default function ImageUpload({
                         <p className="text-sm text-gray-600 text-center">
                             <span className="font-medium text-blue-600">Click to upload</span> or drag and drop
                         </p>
-                        <p className="text-xs text-gray-400 mt-1">PNG, JPG up to 1MB</p>
+                        <p className="text-xs text-gray-400 mt-1">Images are automatically optimized</p>
                     </div>
                 )}
             </div>
