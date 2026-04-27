@@ -30,10 +30,18 @@ export const config = {
         // Protect these routes always
         '/admin/:path*',
         '/dashboard/:path*',
-        // Only run on other routes IF the auth verifier is present (optimization)
+        // Run on any route if an auth verifier is present (optimization)
         {
             source: '/((?!api|_next/static|_next/image|favicon.ico|.*\\.png|.*\\.svg|.*\\.json|.*\\.js).*)',
             has: [{ type: 'query', key: 'neon_auth_session_verifier' }],
+        },
+        {
+            source: '/((?!api|_next/static|_next/image|favicon.ico|.*\\.png|.*\\.svg|.*\\.json|.*\\.js).*)',
+            has: [{ type: 'query', key: 'neon_auth_email_verification_verifier' }],
+        },
+        {
+            source: '/((?!api|_next/static|_next/image|favicon.ico|.*\\.png|.*\\.svg|.*\\.json|.*\\.js).*)',
+            has: [{ type: 'query', key: 'neon_auth_password_reset_verifier' }],
         },
     ],
 }
