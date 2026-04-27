@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { Suspense, useEffect, useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTheme } from '@/lib/useTheme'
@@ -8,7 +8,8 @@ import { authClient } from '@/lib/auth-client'
 
 interface User { id: string; name: string; email: string; role: string; emailVerified?: boolean }
 
-export default function ProfilePage() {
+// ── Inner component that safely uses useSearchParams ──────────────────────────
+function ProfileContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const { toggleTheme, isDark, mounted } = useTheme()
@@ -119,7 +120,8 @@ export default function ProfilePage() {
             </nav>
 
             <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-16">
-            {/* ── JUST VERIFIED SUCCESS BANNER ── */}
+
+                {/* ── JUST VERIFIED SUCCESS BANNER ── */}
                 {justVerified && (
                     <div className="mb-6 rounded-2xl px-4 sm:px-5 py-4 flex items-center gap-3"
                         style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)' }}>
@@ -261,5 +263,23 @@ export default function ProfilePage() {
                 </div>
             </main>
         </div>
+    )
+}
+
+// ── Spinner shown while Suspense is resolving ─────────────────────────────────
+function ProfileSkeleton() {
+    return (
+        <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--cn-bg)' }}>
+            <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+    )
+}
+
+// ── Default export wraps ProfileContent in Suspense ───────────────────────────
+export default function ProfilePage() {
+    return (
+        <Suspense fallback={<ProfileSkeleton />}>
+            <ProfileContent />
+        </Suspense>
     )
 }
