@@ -153,44 +153,64 @@ export async function getOrCreateDbUser(neonUser: NeonAuthUser) {
             'SELECT id, name, email, image, "emailVerified", role FROM users WHERE email = $1 OR id = $2 LIMIT 1',
             [normalizedEmail, neonUser.id]
         )
-        const existing = (rows[0] as DbUser | undefined) ?? null
+        const row = rows[0] as any
+        const existing: DbUser | null = row ? {
+            id: row.id,
+            name: row.name,
+            email: row.email,
+            image: row.image,
+            emailVerified: row.emailVerified ?? row.email_verified ?? row.emailverified ?? false,
+            role: row.role
+        } : null
 
         if (existing) {
-            console.log(`[AuthSync] Found existing user: ${normalizedEmail}. DBVerified: ${existing.emailVerified}`);
+            // Neon Auth might use emailVerified or email_verified
+            const neonVerified = (neonUser as any).emailVerified ?? (neonUser as any).email_verified;
+            const nextEmailVerified = neonVerified ?? existing.emailVerified;
+
+            console.log(`[AuthSync] Found existing user: ${normalizedEmail}. DBVerified: ${existing.emailVerified}, NeonRaw: ${neonVerified}`);
             
             const nextName = neonUser.name ?? existing.name;
             const nextImage = neonUser.image ?? neonUser.picture ?? existing.image ?? null;
-            const nextEmailVerified = neonUser.emailVerified ?? existing.emailVerified;
 
             if (
                 existing.email !== normalizedEmail ||
-                existing.emailVerified !== nextEmailVerified ||
+                Boolean(existing.emailVerified) !== Boolean(nextEmailVerified) ||
                 existing.name !== nextName ||
                 existing.image !== nextImage
             ) {
-                console.log(`[AuthSync] Updating user: ${normalizedEmail}. Changing verified to: ${nextEmailVerified}`);
+                console.log(`[AuthSync] Updating user: ${normalizedEmail}. Changing verified from ${existing.emailVerified} to ${nextEmailVerified}`);
                 const updateResult = await pool.query(
                     'UPDATE users SET email = $1, name = $2, image = $3, "emailVerified" = $4, "updatedAt" = NOW() WHERE id = $5 RETURNING id, name, email, image, "emailVerified", role',
                     [normalizedEmail, nextName, nextImage, nextEmailVerified, existing.id]
                 )
-                return (updateResult.rows[0] as DbUser | undefined) ?? existing
+                const updatedRow = updateResult.rows[0] as any
+                return updatedRow ? {
+                    ...updatedRow,
+                    emailVerified: updatedRow.emailVerified ?? updatedRow.email_verified ?? updatedRow.emailverified ?? nextEmailVerified
+                } as DbUser : existing
             }
             return existing;
         }
 
         console.log(`[AuthSync] Provisioning NEW user: ${normalizedEmail}`);
+        const neonVerified = (neonUser as any).emailVerified ?? (neonUser as any).email_verified ?? false;
         const insertResult = await pool.query(
             'INSERT INTO users (id, name, email, "emailVerified", image, role, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) RETURNING id, name, email, image, "emailVerified", role',
             [
                 neonUser.id,
                 neonUser.name ?? neonUser.email.split('@')[0],
                 normalizedEmail,
-                neonUser.emailVerified ?? false,
+                neonVerified,
                 neonUser.image ?? neonUser.picture ?? null,
                 'USER',
             ]
         )
-        const newUser = (insertResult.rows[0] as DbUser | undefined) ?? null
+        const newRow = insertResult.rows[0] as any
+        const newUser = newRow ? {
+            ...newRow,
+            emailVerified: newRow.emailVerified ?? newRow.email_verified ?? newRow.emailverified ?? neonVerified
+        } as DbUser : null
         console.log(`[AuthSync] Successfully created user: ${normalizedEmail}`);
         return newUser;
     } catch (err) {
