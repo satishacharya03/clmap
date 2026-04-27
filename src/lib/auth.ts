@@ -136,6 +136,24 @@ export async function isAdmin() {
 }
 
 /**
+ * Query neon_auth.users directly — the authoritative source for email_verified.
+ * The session JWT may lag behind; the DB is always up to date after verification.
+ */
+async function getNeonAuthVerifiedStatus(userId: string): Promise<boolean | null> {
+    try {
+        const { rows } = await pool.query(
+            'SELECT email_verified FROM neon_auth.users WHERE id = $1 LIMIT 1',
+            [userId]
+        )
+        if (rows.length === 0) return null
+        return rows[0].email_verified === true
+    } catch (err) {
+        console.warn('[AuthSync] Could not query neon_auth.users (will fall back to session):', err)
+        return null
+    }
+}
+
+/**
  * Sync the Neon user with our local database.
  * Auto-creates the DB record on first login if it doesn't exist yet.
  */
@@ -164,13 +182,14 @@ export async function getOrCreateDbUser(neonUser: NeonAuthUser) {
         } : null
 
         if (existing) {
-            // Neon Auth uses emailVerified or email_verified in session
-            // IMPORTANT: if undefined, do NOT fall back to the stale DB value — treat as unknown
-            const neonRaw = (neonUser as any).emailVerified ?? (neonUser as any).email_verified;
-            // Only override DB value if Neon explicitly provides a boolean
+            // Query neon_auth.users directly — most reliable source after email verification
+            const neonDbVerified = await getNeonAuthVerifiedStatus(neonUser.id)
+            // Fall back to session JWT fields if the neon_auth query failed
+            const neonSessionRaw = (neonUser as any).emailVerified ?? (neonUser as any).email_verified
+            const neonRaw = neonDbVerified !== null ? neonDbVerified : neonSessionRaw
             const nextEmailVerified = typeof neonRaw === 'boolean' ? neonRaw : existing.emailVerified;
 
-            console.log(`[AuthSync] Found existing user: ${normalizedEmail}. DBVerified: ${existing.emailVerified}, NeonRaw: ${neonRaw}, NextVerified: ${nextEmailVerified}`);
+            console.log(`[AuthSync] Found existing user: ${normalizedEmail}. DBVerified: ${existing.emailVerified}, NeonAuthDB: ${neonDbVerified}, NextVerified: ${nextEmailVerified}`);
             
             const nextName = neonUser.name ?? existing.name;
             const nextImage = neonUser.image ?? neonUser.picture ?? existing.image ?? null;
@@ -196,7 +215,10 @@ export async function getOrCreateDbUser(neonUser: NeonAuthUser) {
         }
 
         console.log(`[AuthSync] Provisioning NEW user: ${normalizedEmail}`);
-        const neonVerified = (neonUser as any).emailVerified ?? (neonUser as any).email_verified ?? false;
+        const neonDbVerifiedNew = await getNeonAuthVerifiedStatus(neonUser.id)
+        const neonVerified = neonDbVerifiedNew !== null
+            ? neonDbVerifiedNew
+            : ((neonUser as any).emailVerified ?? (neonUser as any).email_verified ?? false);
         const insertResult = await pool.query(
             'INSERT INTO users (id, name, email, "emailVerified", image, role, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) RETURNING id, name, email, image, "emailVerified", role',
             [

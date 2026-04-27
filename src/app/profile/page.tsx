@@ -1,60 +1,60 @@
 'use client'
 
-import { Suspense, useEffect, useState, useRef } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTheme } from '@/lib/useTheme'
 import { authClient } from '@/lib/auth-client'
 
 interface User { id: string; name: string; email: string; role: string; emailVerified?: boolean }
 
-// ── Inner component that safely uses useSearchParams ──────────────────────────
-function ProfileContent() {
+export default function ProfilePage() {
     const router = useRouter()
-    const searchParams = useSearchParams()
     const { toggleTheme, isDark, mounted } = useTheme()
     const [user, setUser] = useState<User | null>(null)
     const [stats, setStats] = useState<{ places: number; reviews: number } | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [verificationStatus, setVerificationStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
     const [justVerified, setJustVerified] = useState(false)
-    const syncedRef = useRef(false)
 
-    const fetchUser = () =>
-        fetch('/api/auth/me', { cache: 'no-store' })
-            .then(r => { if (!r.ok) throw new Error(); return r.json() })
-            .then(d => {
-                if (d.user) {
-                    setUser(d.user)
-                    fetch('/api/auth/stats').then(r => r.ok ? r.json() : null).then(d => d?.stats && setStats(d.stats))
-                } else router.push('/login')
-            })
-            .catch(() => router.push('/login'))
-            .finally(() => setIsLoading(false))
+    const fetchUser = async () => {
+        try {
+            const r = await fetch('/api/auth/me', { cache: 'no-store' })
+            if (!r.ok) { router.push('/login'); return null }
+            const d = await r.json()
+            if (!d.user) { router.push('/login'); return null }
+            setUser(d.user)
+            fetch('/api/auth/stats').then(r => r.ok ? r.json() : null).then(d => d?.stats && setStats(d.stats))
+            return d.user as User
+        } catch {
+            router.push('/login')
+            return null
+        }
+    }
 
     useEffect(() => {
-        const hasVerifier = searchParams.has('neon_auth_email_verification_verifier')
+        (async () => {
+            setIsLoading(true)
+            const fetchedUser = await fetchUser()
 
-        if (hasVerifier && !syncedRef.current) {
-            syncedRef.current = true
-            // Give Neon middleware ~800ms to process the verifier, then sync + re-fetch
-            setTimeout(async () => {
+            // If user is unverified, immediately check neon_auth.users source of truth
+            if (fetchedUser && !fetchedUser.emailVerified) {
                 try {
                     const res = await fetch('/api/auth/sync-verification', { method: 'POST' })
                     const data = await res.json().catch(() => ({}))
                     if (data?.verified) {
+                        // Neon Auth has them as verified — re-fetch to get updated DB record
                         setJustVerified(true)
+                        await fetchUser()
                         setTimeout(() => setJustVerified(false), 6000)
                     }
                 } catch (e) {
                     console.error('Sync verification failed:', e)
                 }
-                fetchUser()
-            }, 800)
-        } else {
-            fetchUser()
-        }
-    }, [router, searchParams])
+            }
+            setIsLoading(false)
+        })()
+    }, [])
 
     const handleLogout = async () => {
         await authClient.signOut().catch(() => null)
@@ -68,10 +68,10 @@ function ProfileContent() {
             const res = await fetch('/api/auth/send-verification-link', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ callbackURL: `${window.location.pathname}${window.location.search}` || '/profile' }),
+                body: JSON.stringify({ callbackURL: '/profile' }),
             })
             const data = await res.json().catch(() => null)
-            if (!res.ok) throw new Error(data?.error || 'Failed to send verification link')
+            if (!res.ok) throw new Error(data?.error || 'Failed')
             setVerificationStatus('sent')
             setTimeout(() => setVerificationStatus('idle'), 5000)
         } catch (error) {
@@ -101,7 +101,6 @@ function ProfileContent() {
                         <span className="font-bold text-sm" style={{ color: 'var(--cn-text-1)' }}>De-tect</span>
                     </Link>
                     <div className="flex items-center gap-2">
-                        {/* Theme toggle */}
                         {mounted && (
                             <button onClick={toggleTheme} title="Toggle theme"
                                 className="w-9 h-9 rounded-full flex items-center justify-center text-base transition-all hover:scale-110 active:scale-95"
@@ -121,7 +120,7 @@ function ProfileContent() {
 
             <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-16">
 
-                {/* ── JUST VERIFIED SUCCESS BANNER ── */}
+                {/* ── SUCCESS BANNER (just verified) ── */}
                 {justVerified && (
                     <div className="mb-6 rounded-2xl px-4 sm:px-5 py-4 flex items-center gap-3"
                         style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)' }}>
@@ -133,13 +132,14 @@ function ProfileContent() {
                     </div>
                 )}
 
+                {/* ── PENDING VERIFICATION BANNER ── */}
                 {user.emailVerified === false && !justVerified && (
                     <div className="mb-6 rounded-2xl px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
                         style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
                         <div>
                             <p className="text-sm font-semibold" style={{ color: '#f59e0b' }}>Email verification pending</p>
                             <p className="text-sm mt-1" style={{ color: 'var(--cn-text-2)' }}>
-                                Check your inbox for the Neon verification email. Until you verify, place contributions and reviews stay locked.
+                                Check your inbox. Until you verify, place contributions and reviews stay locked.
                             </p>
                         </div>
                         <button
@@ -148,7 +148,7 @@ function ProfileContent() {
                             className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-60"
                             style={{ background: verificationStatus === 'error' ? '#dc2626' : '#f59e0b' }}
                         >
-                            {verificationStatus === 'loading' ? 'Sending...' : verificationStatus === 'sent' ? 'Link Sent' : verificationStatus === 'error' ? 'Try Again' : 'Send Verification Link'}
+                            {verificationStatus === 'loading' ? 'Sending...' : verificationStatus === 'sent' ? 'Link Sent ✓' : verificationStatus === 'error' ? 'Try Again' : 'Send Verification Link'}
                         </button>
                     </div>
                 )}
@@ -230,7 +230,7 @@ function ProfileContent() {
                                 {[
                                     { label: 'Full Name', value: user.name },
                                     { label: 'Email Address', value: user.email },
-                                    { label: 'Email Status', value: user.emailVerified ? 'Verified' : 'Pending Verification' },
+                                    { label: 'Email Status', value: user.emailVerified ? '✅ Verified' : '⏳ Pending Verification' },
                                     { label: 'Role', value: user.role },
                                 ].map(row => (
                                     <div key={row.label} className="flex justify-between items-center py-3.5">
@@ -263,23 +263,5 @@ function ProfileContent() {
                 </div>
             </main>
         </div>
-    )
-}
-
-// ── Spinner shown while Suspense is resolving ─────────────────────────────────
-function ProfileSkeleton() {
-    return (
-        <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--cn-bg)' }}>
-            <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-    )
-}
-
-// ── Default export wraps ProfileContent in Suspense ───────────────────────────
-export default function ProfilePage() {
-    return (
-        <Suspense fallback={<ProfileSkeleton />}>
-            <ProfileContent />
-        </Suspense>
     )
 }
