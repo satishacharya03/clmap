@@ -3,7 +3,7 @@
 import { useState, FormEvent, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { signIn } from '@/lib/auth-client'
+import { authClient } from '@/lib/auth-client'
 
 // ─── Google Icon ─────────────────────────────────────────────────────────────
 function GoogleIcon() {
@@ -27,17 +27,36 @@ function Spinner() {
     )
 }
 
-// ─── Input ────────────────────────────────────────────────────────────────────
-function Field({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+function Field({ label, onTogglePassword, showPassword, ...props }: { label: string; onTogglePassword?: () => void; showPassword?: boolean } & React.InputHTMLAttributes<HTMLInputElement>) {
     return (
         <div>
             <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
                 {label}
             </label>
-            <input
-                {...props}
-                className="w-full px-4 py-3.5 rounded-2xl border border-white/10 bg-white/5 text-white placeholder-white/25 focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/60 outline-none text-sm transition-all"
-            />
+            <div className="relative">
+                <input
+                    {...props}
+                    className="w-full px-4 py-3.5 rounded-2xl border border-white/10 bg-white/5 text-white placeholder-white/25 focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/60 outline-none text-sm transition-all"
+                />
+                {onTogglePassword && (
+                    <button
+                        type="button"
+                        onClick={onTogglePassword}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
+                    >
+                        {showPassword ? (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                        ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a10.05 10.05 0 015.5-5.5m7.458-1.5A10.05 10.05 0 0112 5c4.478 0 8.268 2.943 9.542 7-.306.974-.75 1.88-1.3 2.675m-7.2-2.675v.01M3 3l18 18" />
+                            </svg>
+                        )}
+                    </button>
+                )}
+            </div>
         </div>
     )
 }
@@ -50,42 +69,27 @@ function LoginForm() {
 
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+    const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState('')
-    const [info, setInfo] = useState('')
     const [isLoading, setIsLoading] = useState(false)
 
-    // ── Email / Password login ──────────────────────────────────────────────
     const handleEmailLogin = async (e: FormEvent) => {
         e.preventDefault()
-        setError(''); setInfo('')
+        setError('')
         setIsLoading(true)
         try {
-            const neonLogin = await signIn.email({
-                email,
-                password,
-                callbackURL: redirectTo,
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email,
+                    password,
+                }),
             })
 
-            if (neonLogin.error) {
-                const legacyRes = await fetch('/api/auth/legacy-login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password }),
-                })
-
-                if (!legacyRes.ok) {
-                    const legacyData = await legacyRes.json().catch(() => null)
-                    throw new Error(
-                        legacyData?.error ||
-                        neonLogin.error.message ||
-                        'Invalid email or password'
-                    )
-                }
-
-                const legacyData = await legacyRes.json()
-                if (legacyData?.verificationRequired) {
-                    setInfo('Signed in with your existing account. Please verify your email from the banner on your profile page.')
-                }
+            const result = await response.json().catch(() => null)
+            if (!response.ok) {
+                throw new Error(result?.error || 'Invalid email or password')
             }
 
             router.push(redirectTo)
@@ -97,17 +101,16 @@ function LoginForm() {
         }
     }
 
-    // ── Google OAuth ────────────────────────────────────────────────────────
     const handleGoogleSignIn = async () => {
-        setError(''); setInfo('')
+        setError('')
         setIsLoading(true)
         try {
-            await signIn.social({
+            await authClient.signIn.social({
                 provider: 'google',
                 callbackURL: redirectTo,
             })
-        } catch {
-            setError('Google sign-in failed. Please try again.')
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Google sign-in failed. Please try again.')
             setIsLoading(false)
         }
     }
@@ -145,11 +148,6 @@ function LoginForm() {
                             <span className="mt-0.5 text-base">⚠️</span> {error}
                         </div>
                     )}
-                    {info && (
-                        <div className="mb-5 flex items-start gap-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-4 text-indigo-300 text-sm">
-                            <span className="mt-0.5 text-base">📧</span> {info}
-                        </div>
-                    )}
 
                     <h2 className="text-xl font-bold text-white mb-6">Sign in to your account</h2>
 
@@ -165,12 +163,14 @@ function LoginForm() {
                         />
                         <Field
                             label="Password"
-                            type="password"
+                            type={showPassword ? 'text' : 'password'}
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             required
                             placeholder="••••••••"
                             autoComplete="current-password"
+                            showPassword={showPassword}
+                            onTogglePassword={() => setShowPassword(!showPassword)}
                         />
 
                         <button
@@ -183,7 +183,6 @@ function LoginForm() {
                         </button>
                     </form>
 
-                    {/* Divider */}
                     <div className="relative my-6">
                         <div className="absolute inset-0 flex items-center">
                             <div className="w-full border-t border-white/10" />
@@ -193,15 +192,15 @@ function LoginForm() {
                         </div>
                     </div>
 
-                    {/* Google */}
                     <button
                         onClick={handleGoogleSignIn}
+                        type="button"
                         disabled={isLoading}
                         id="google-signin-btn"
                         className="w-full py-3.5 text-white/80 font-medium rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center gap-3 text-sm disabled:opacity-50"
                     >
                         <GoogleIcon />
-                        Continue with Google
+                        {isLoading ? <><Spinner /> Connecting...</> : 'Continue with Google'}
                     </button>
 
                     <div className="mt-6 text-center">

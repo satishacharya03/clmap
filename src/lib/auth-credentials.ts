@@ -2,7 +2,6 @@ import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import { pool } from './edge-db'
 
-// Types matching database schema
 export interface User {
     id: string
     name: string | null
@@ -15,7 +14,6 @@ export interface User {
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'default-secret-change-me')
 const TOKEN_EXPIRY = '7d'
 
-// Password hashing using Web Crypto API (edge-compatible)
 export async function hashPassword(password: string): Promise<string> {
     const encoder = new TextEncoder()
     const data = encoder.encode(password)
@@ -31,7 +29,6 @@ export async function hashPassword(password: string): Promise<string> {
         256
     )
 
-    // Combine salt and hash, encode as base64
     const combined = new Uint8Array(salt.length + hash.byteLength)
     combined.set(salt)
     combined.set(new Uint8Array(hash), salt.length)
@@ -59,9 +56,8 @@ export async function comparePassword(password: string, hashedPassword: string):
         )
 
         const newHash = new Uint8Array(hash)
-
-        // Constant-time comparison
         if (newHash.length !== storedHash.length) return false
+
         let result = 0
         for (let i = 0; i < newHash.length; i++) {
             result |= newHash[i] ^ storedHash[i]
@@ -72,12 +68,11 @@ export async function comparePassword(password: string, hashedPassword: string):
     }
 }
 
-// JWT token management using jose (edge-compatible)
 export interface TokenPayload {
     userId: string
     email: string
     role: string
-    [key: string]: unknown  // Index signature for JWTPayload compatibility
+    [key: string]: unknown
 }
 
 export async function generateToken(payload: TokenPayload): Promise<string> {
@@ -97,35 +92,31 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
     }
 }
 
-// Get current user from cookies
 export async function getCurrentUser(): Promise<User | null> {
     try {
         const cookieStore = await cookies()
         const token = cookieStore.get('auth-token')?.value
-
         if (!token) return null
 
         const payload = await verifyToken(token)
         if (!payload) return null
 
         const { rows } = await pool.query(
-            'SELECT * FROM users WHERE id = $1',
+            'SELECT id, name, email, role, "createdAt", "updatedAt" FROM users WHERE id = $1 LIMIT 1',
             [payload.userId]
         )
 
-        return rows[0] as User || null
+        return (rows[0] as User | undefined) ?? null
     } catch {
         return null
     }
 }
 
-// Check if user is admin
 export async function isAdmin(): Promise<boolean> {
     const user = await getCurrentUser()
     return user?.role === 'ADMIN'
 }
 
-// Token cookie helpers
 export async function setAuthCookie(token: string) {
     const cookieStore = await cookies()
     cookieStore.set('auth-token', token, {
@@ -133,7 +124,7 @@ export async function setAuthCookie(token: string) {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 7 * 24 * 60 * 60,
-        path: '/'
+        path: '/',
     })
 }
 

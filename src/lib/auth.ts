@@ -1,7 +1,7 @@
 import { createNeonAuth } from '@neondatabase/auth/next/server';
 import { cookies } from 'next/headers';
-import prisma from './db';
-import { verifyToken } from './auth-legacy';
+import { pool } from './edge-db';
+import { verifyToken } from './auth-credentials';
 // Next.js handles .env loading automatically.
 
 // ============ Neon Managed Auth Instance ============
@@ -19,8 +19,16 @@ export async function getSession() {
     return data;
 }
 
-type DbUser = Awaited<ReturnType<typeof prisma.user.findUnique>>
-type AuthMethod = 'neon' | 'legacy'
+type AuthMethod = 'neon' | 'credentials'
+
+interface DbUser {
+    id: string
+    name: string | null
+    email: string
+    image: string | null
+    emailVerified: boolean
+    role: 'USER' | 'ADMIN'
+}
 
 interface NeonAuthUser {
     id: string
@@ -29,6 +37,10 @@ interface NeonAuthUser {
     image?: string | null
     picture?: string | null
     emailVerified?: boolean
+}
+
+function normalizeEmail(email: string) {
+    return email.trim().toLowerCase()
 }
 
 export interface AppCurrentUser {
@@ -63,7 +75,7 @@ function mapDbUserToAppUser(
     };
 }
 
-async function getLegacyCurrentUser() {
+async function getCredentialsCurrentUser() {
     try {
         const cookieStore = await cookies();
         const token = cookieStore.get('auth-token')?.value;
@@ -72,18 +84,20 @@ async function getLegacyCurrentUser() {
         const payload = await verifyToken(token);
         if (!payload?.email) return null;
 
-        const dbUser = await prisma.user.findUnique({
-            where: { email: payload.email },
-        });
+        const { rows } = await pool.query(
+            'SELECT id, name, email, image, "emailVerified", role FROM users WHERE email = $1 LIMIT 1',
+            [normalizeEmail(payload.email)]
+        )
+        const dbUser = (rows[0] as DbUser | undefined) ?? null
 
         if (!dbUser) return null;
         return mapDbUserToAppUser(dbUser, {
             id: payload.userId,
             email: payload.email,
             emailVerified: false,
-        }, 'legacy');
+        }, 'credentials');
     } catch (error) {
-        console.error('Legacy auth lookup failed:', error);
+        console.error('Credentials auth lookup failed:', error);
         return null;
     }
 }
@@ -108,11 +122,11 @@ export async function getCurrentUser() {
         console.error('Neon auth lookup failed:', error);
     }
 
-    return await getLegacyCurrentUser();
+    return await getCredentialsCurrentUser();
 }
 
 /**
- * isAdmin checks our OWN Prisma users table for the role,
+ * isAdmin checks our own users table for the role,
  * because Neon Auth manages identity but our app manages roles.
  * Falls back to false if no matching user found.
  */
@@ -122,7 +136,7 @@ export async function isAdmin() {
 }
 
 /**
- * Sync the Neon user with our local Prisma database.
+ * Sync the Neon user with our local database.
  * Auto-creates the DB record on first login if it doesn't exist yet.
  */
 export async function getOrCreateDbUser(neonUser: NeonAuthUser) {
@@ -132,46 +146,49 @@ export async function getOrCreateDbUser(neonUser: NeonAuthUser) {
     }
 
     try {
-        const existing = await prisma.user.findUnique({
-            where: { email: neonUser.email },
-        });
+        const normalizedEmail = normalizeEmail(neonUser.email)
+
+        const { rows } = await pool.query(
+            'SELECT id, name, email, image, "emailVerified", role FROM users WHERE email = $1 OR id = $2 LIMIT 1',
+            [normalizedEmail, neonUser.id]
+        )
+        const existing = (rows[0] as DbUser | undefined) ?? null
 
         if (existing) {
-            console.log(`✅ Found existing user in DB: ${neonUser.email}`);
+            console.log(`✅ Found existing user in DB: ${normalizedEmail}`);
             const nextName = neonUser.name ?? existing.name;
             const nextImage = neonUser.image ?? neonUser.picture ?? existing.image ?? null;
             const nextEmailVerified = neonUser.emailVerified ?? existing.emailVerified;
 
             if (
+                existing.email !== normalizedEmail ||
                 existing.emailVerified !== nextEmailVerified ||
                 existing.name !== nextName ||
                 existing.image !== nextImage
             ) {
-                return await prisma.user.update({
-                    where: { email: neonUser.email },
-                    data: {
-                        name: nextName,
-                        image: nextImage,
-                        emailVerified: nextEmailVerified,
-                    }
-                });
+                const updateResult = await pool.query(
+                    'UPDATE users SET email = $1, name = $2, image = $3, "emailVerified" = $4, "updatedAt" = NOW() WHERE id = $5 RETURNING id, name, email, image, "emailVerified", role',
+                    [normalizedEmail, nextName, nextImage, nextEmailVerified, existing.id]
+                )
+                return (updateResult.rows[0] as DbUser | undefined) ?? existing
             }
             return existing;
         }
 
-        console.log(`🆕 Provisioning NEW user in DB: ${neonUser.email}`);
-        // Auto-provision on first login
-        const newUser = await prisma.user.create({
-            data: {
-                id: neonUser.id,
-                name: neonUser.name ?? neonUser.email.split('@')[0],
-                email: neonUser.email,
-                emailVerified: neonUser.emailVerified ?? false,
-                image: neonUser.image ?? neonUser.picture ?? null,
-                role: 'USER',
-            },
-        });
-        console.log(`✨ Successfully created DB user for: ${neonUser.email}`);
+        console.log(`🆕 Provisioning NEW user in DB: ${normalizedEmail}`);
+        const insertResult = await pool.query(
+            'INSERT INTO users (id, name, email, "emailVerified", image, role, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) RETURNING id, name, email, image, "emailVerified", role',
+            [
+                neonUser.id,
+                neonUser.name ?? neonUser.email.split('@')[0],
+                normalizedEmail,
+                neonUser.emailVerified ?? false,
+                neonUser.image ?? neonUser.picture ?? null,
+                'USER',
+            ]
+        )
+        const newUser = (insertResult.rows[0] as DbUser | undefined) ?? null
+        console.log(`✨ Successfully created DB user for: ${normalizedEmail}`);
         return newUser;
     } catch (err) {
         console.error("❌ Error in getOrCreateDbUser:", err);

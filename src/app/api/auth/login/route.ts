@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
 import { pool } from '@/lib/edge-db'
-import { auth } from '@/lib/auth'
-import { comparePassword, generateToken, setAuthCookie } from '@/lib/auth-legacy'
+import { comparePassword, generateToken, setAuthCookie } from '@/lib/auth-credentials'
 
 async function verifyStoredPassword(email: string, plainPassword: string, storedPassword: string) {
     if (storedPassword.startsWith('$2')) {
         try {
             const { rows } = await pool.query(
-                `SELECT (password = crypt($2, password)) AS match FROM users WHERE email = $1 AND password IS NOT NULL LIMIT 1`,
+                'SELECT (password = crypt($2, password)) AS match FROM users WHERE email = $1 AND password IS NOT NULL LIMIT 1',
                 [email, plainPassword]
             )
             if (rows[0]?.match === true) return true
@@ -18,36 +16,6 @@ async function verifyStoredPassword(email: string, plainPassword: string, stored
     }
 
     return comparePassword(plainPassword, storedPassword)
-}
-
-async function tryProvisionNeonAccount(user: { email: string; name: string }, password: string) {
-    try {
-        const signInResult = await auth.signIn.email({
-            email: user.email,
-            password,
-            callbackURL: '/profile',
-        })
-
-        if (!signInResult?.error) {
-            return { available: true }
-        }
-    } catch (error) {
-        console.error('Neon sign-in check failed during legacy login:', error)
-    }
-
-    try {
-        const signUpResult = await auth.signUp.email({
-            email: user.email,
-            password,
-            name: user.name,
-            callbackURL: '/profile',
-        })
-
-        return { available: !signUpResult?.error }
-    } catch (error) {
-        console.error('Neon sign-up failed during legacy login:', error)
-        return { available: false }
-    }
 }
 
 export async function POST(request: NextRequest) {
@@ -60,17 +28,21 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
         }
 
-        const user = await prisma.user.findUnique({
-            where: { email },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                emailVerified: true,
-                password: true,
-            },
-        })
+        const { rows } = await pool.query(
+            'SELECT id, name, email, role, "emailVerified", password FROM users WHERE email = $1 LIMIT 1',
+            [email]
+        )
+
+        const user = rows[0] as
+            | {
+                id: string
+                name: string | null
+                email: string
+                role: 'USER' | 'ADMIN'
+                emailVerified: boolean
+                password: string | null
+            }
+            | undefined
 
         if (!user?.password) {
             return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
@@ -86,18 +58,12 @@ export async function POST(request: NextRequest) {
             email: user.email,
             role: user.role,
         })
-        await setAuthCookie(token)
 
-        const neon = await tryProvisionNeonAccount({
-            email: user.email,
-            name: user.name || user.email.split('@')[0],
-        }, password)
+        await setAuthCookie(token)
 
         return NextResponse.json({
             success: true,
-            authMethod: 'legacy',
-            verificationRequired: !user.emailVerified,
-            neonAccountReady: neon.available,
+            authMethod: 'credentials',
             user: {
                 id: user.id,
                 name: user.name,
@@ -107,7 +73,7 @@ export async function POST(request: NextRequest) {
             },
         })
     } catch (error) {
-        console.error('Legacy login error:', error)
+        console.error('Login error:', error)
         return NextResponse.json({ error: 'Login failed' }, { status: 500 })
     }
 }

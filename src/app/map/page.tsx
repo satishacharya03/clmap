@@ -386,7 +386,7 @@ export default function MapPage() {
                 <div className="absolute top-0 left-0 right-0 z-[100] bg-amber-500 text-white px-4 py-2 flex items-center justify-between shadow-lg animate-slideDown">
                     <div className="flex items-center gap-2 text-sm font-semibold">
                         <span className="text-lg">📧</span>
-                        <p>Verify your email to unlock all features. Check your inbox for the link.</p>
+                        <p>Verify your email to unlock all features. Check your inbox for the Neon verification link.</p>
                     </div>
                     <button 
                         onClick={async () => {
@@ -394,7 +394,7 @@ export default function MapPage() {
                                 const res = await fetch('/api/auth/send-verification-link', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ callbackURL: window.location.href }),
+                                    body: JSON.stringify({ callbackURL: `${window.location.pathname}${window.location.search}` || '/map' }),
                                 })
                                 if (!res.ok) throw new Error()
                                 alert('Verification email resent!')

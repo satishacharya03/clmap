@@ -1,0 +1,53 @@
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+Legacy register error: Error: No database host or connection string was set, and key parameters have default values (host: localhost, user: ASUS, db: ASUS, password: null). Is an environment variable missing? Alternatively, if you intended to connect with these parameters, please set the host to 'localhost' explicitly.
+    at ignore-listed frames {
+  clientVersion: '7.2.0'
+}
+Legacy register error: Error: No database host or connection string was set, and key parameters have default values (host: localhost, user: ASUS, db: ASUS, password: null). Is an environment variable missing? Alternatively, if you intended to connect with these parameters, please set the host to 'localhost' explicitly.
+    at ignore-listed frames {
+  clientVersion: '7.2.0'
+}
+Stats fetch error: Error: No database host or connection string was set, and key parameters have default values (host: localhost, user: ASUS, db: ASUS, password: null). Is an environment variable missing? Alternatively, if you intended to connect with these parameters, please set the host to 'localhost' explicitly.
+    at async GET (src\app\api\auth\stats\route.ts:12:45)
+  10 |         }
+  11 |
+> 12 |         const [placesCount, reviewsCount] = await Promise.all([
+     |                                             ^
+  13 |             prisma.place.count({ where: { createdById: user.id } }),
+  14 |             prisma.review.count({ where: { userId: user.id } })
+  15 |         ]) {
+  clientVersion: '7.2.0'
+}
+Stats fetch error: Error: No database host or connection string was set, and key parameters have default values (host: localhost, user: ASUS, db: ASUS, password: null). Is an environment variable missing? Alternatively, if you intended to connect with these parameters, please set the host to 'localhost' explicitly.
+    at async GET (src\app\api\auth\stats\route.ts:12:45)
+  10 |         }
+  11 |
+> 12 |         const [placesCount, reviewsCount] = await Promise.all([
+     |                                             ^
+  13 |             prisma.place.count({ where: { createdById: user.id } }),
+  14 |             prisma.review.count({ where: { userId: user.id } })
+  15 |         ]) {
+  clientVersion: '7.2.0'
+}
+Stats fetch error: Error: No database host or connection string was set, and key parameters have default values (host: localhost, user: ASUS, db: ASUS, password: null). Is an environment variable missing? Alternatively, if you intended to connect with these parameters, please set the host to 'localhost' explicitly.
+    at async GET (src\app\api\auth\stats\route.ts:12:45)
+  10 |         }
+  11 |
+> 12 |         const [placesCount, reviewsCount] = await Promise.all([
+     |                                             ^
+  13 |             prisma.place.count({ where: { createdById: user.id } }),
+  14 |             prisma.review.count({ where: { userId: user.id } })
+  15 |         ]) {
+  clientVersion: '7.2.0'
+}
+Stats fetch error: Error: No database host or connection string was set, and key parameters have default values (host: localhost, user: ASUS, db: ASUS, password: null). Is an environment variable missing? Alternatively, if you intended to connect with these parameters, please set the host to 'localhost' explicitly.
+    at async GET (src\app\api\auth\stats\route.ts:12:45)
+  10 |         }
+  11 |
+> 12 |         const [placesCount, reviewsCount] = await Promise.all([
+     |                                             ^
+  13 |             prisma.place.count({ where: { createdById: user.id } }),
+  14 |             prisma.review.count({ where: { userId: user.id } })
+  15 |         ]) {
+  clientVersion: '7.2.0'
+}

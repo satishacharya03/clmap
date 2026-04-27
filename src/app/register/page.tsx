@@ -3,7 +3,7 @@
 import { useState, FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { signUp, signIn } from '@/lib/auth-client'
+import { authClient } from '@/lib/auth-client'
 
 function Spinner() {
     return (
@@ -25,16 +25,36 @@ function GoogleIcon() {
     )
 }
 
-function Field({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+function Field({ label, onTogglePassword, showPassword, ...props }: { label: string; onTogglePassword?: () => void; showPassword?: boolean } & React.InputHTMLAttributes<HTMLInputElement>) {
     return (
         <div>
             <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
                 {label}
             </label>
-            <input
-                {...props}
-                className="w-full px-4 py-3.5 rounded-2xl border border-white/10 bg-white/5 text-white placeholder-white/25 focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/60 outline-none text-sm transition-all"
-            />
+            <div className="relative">
+                <input
+                    {...props}
+                    className="w-full px-4 py-3.5 rounded-2xl border border-white/10 bg-white/5 text-white placeholder-white/25 focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/60 outline-none text-sm transition-all"
+                />
+                {onTogglePassword && (
+                    <button
+                        type="button"
+                        onClick={onTogglePassword}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
+                    >
+                        {showPassword ? (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                        ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a10.05 10.05 0 015.5-5.5m7.458-1.5A10.05 10.05 0 0112 5c4.478 0 8.268 2.943 9.542 7-.306.974-.75 1.88-1.3 2.675m-7.2-2.675v.01M3 3l18 18" />
+                            </svg>
+                        )}
+                    </button>
+                )}
+            </div>
         </div>
     )
 }
@@ -42,39 +62,50 @@ function Field({ label, ...props }: { label: string } & React.InputHTMLAttribute
 export default function RegisterPage() {
     const router = useRouter()
 
-    const [step, setStep] = useState<'register' | 'verify'>('register')
     const [name, setName] = useState('')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
-    const [otp, setOtp] = useState('')
+    const [showPassword, setShowPassword] = useState(false)
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false)
     const [error, setError] = useState('')
     const [info, setInfo] = useState('')
     const [isLoading, setIsLoading] = useState(false)
 
-    // ── Step 1: Register ──────────────────────────────────────────────────────
     const handleRegister = async (e: FormEvent) => {
         e.preventDefault()
-        setError(''); setInfo('')
-        if (password !== confirmPassword) { setError('Passwords do not match'); return }
-        if (password.length < 8) { setError('Password must be at least 8 characters'); return }
+        setError('')
+        setInfo('')
+        if (password !== confirmPassword) {
+            setError('Passwords do not match')
+            return
+        }
+        if (password.length < 8) {
+            setError('Password must be at least 8 characters')
+            return
+        }
         setIsLoading(true)
         try {
-            const { error: authError } = await signUp.email({
-                email,
-                password,
-                name,
-                callbackURL: '/map',
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name,
+                    email,
+                    password,
+                }),
             })
-            if (authError) throw new Error(authError.message || 'Registration failed')
-            
-            // Registration succeeded — Better Auth sends a verification link automatically
-            setInfo('Account created! A verification link has been sent to your email.')
-            
-            // Redirect to map immediately as requested
+
+            const result = await response.json().catch(() => null)
+            if (!response.ok) {
+                throw new Error(result?.error || 'Registration failed')
+            }
+
+            setInfo('Account created. Check your inbox for the verification email.')
             setTimeout(() => {
-                router.push('/map')
-            }, 1000)
+                router.push('/profile')
+                router.refresh()
+            }, 900)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Registration failed')
         } finally {
@@ -82,14 +113,17 @@ export default function RegisterPage() {
         }
     }
 
-    // ── Google sign-up ────────────────────────────────────────────────────────
     const handleGoogle = async () => {
-        setError(''); setInfo('')
+        setError('')
+        setInfo('')
         setIsLoading(true)
         try {
-            await signIn.social({ provider: 'google', callbackURL: '/map' })
-        } catch {
-            setError('Google sign-in failed.')
+            await authClient.signIn.social({
+                provider: 'google',
+                callbackURL: '/map',
+            })
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Google sign-in failed.')
             setIsLoading(false)
         }
     }
@@ -129,22 +163,49 @@ export default function RegisterPage() {
                         </div>
                     )}
 
-                    {/* ── Registration form ─────────────────────── */}
                     <h2 className="text-xl font-bold text-white mb-6">Create your account</h2>
 
                     <form onSubmit={handleRegister} className="space-y-4">
-                        <Field label="Full Name" type="text" value={name}
-                            onChange={e => setName(e.target.value)} required
-                            placeholder="Your full name" autoComplete="name" />
-                        <Field label="Email" type="email" value={email}
-                            onChange={e => setEmail(e.target.value)} required
-                            placeholder="you@campus.edu" autoComplete="email" />
-                        <Field label="Password" type="password" value={password}
-                            onChange={e => setPassword(e.target.value)} required
-                            placeholder="Min. 8 characters" autoComplete="new-password" />
-                        <Field label="Confirm Password" type="password" value={confirmPassword}
-                            onChange={e => setConfirmPassword(e.target.value)} required
-                            placeholder="••••••••" autoComplete="new-password" />
+                        <Field
+                            label="Full Name"
+                            type="text"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            required
+                            placeholder="Your full name"
+                            autoComplete="name"
+                        />
+                        <Field
+                            label="Email"
+                            type="email"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            required
+                            placeholder="you@campus.edu"
+                            autoComplete="email"
+                        />
+                        <Field
+                            label="Password"
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            required
+                            placeholder="Min. 8 characters"
+                            autoComplete="new-password"
+                            showPassword={showPassword}
+                            onTogglePassword={() => setShowPassword(!showPassword)}
+                        />
+                        <Field
+                            label="Confirm Password"
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            value={confirmPassword}
+                            onChange={e => setConfirmPassword(e.target.value)}
+                            required
+                            placeholder="••••••••"
+                            autoComplete="new-password"
+                            showPassword={showConfirmPassword}
+                            onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
+                        />
 
                         <button
                             type="submit"
@@ -167,11 +228,12 @@ export default function RegisterPage() {
 
                     <button
                         onClick={handleGoogle}
+                        type="button"
                         disabled={isLoading}
                         className="w-full py-3.5 text-white/80 font-medium rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all flex items-center justify-center gap-3 text-sm disabled:opacity-50"
                     >
                         <GoogleIcon />
-                        Continue with Google
+                        {isLoading ? <><Spinner /> Connecting...</> : 'Continue with Google'}
                     </button>
 
                     <div className="mt-6 text-center">

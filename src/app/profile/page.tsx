@@ -41,7 +41,7 @@ export default function ProfilePage() {
             const res = await fetch('/api/auth/send-verification-link', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ callbackURL: window.location.href }),
+                body: JSON.stringify({ callbackURL: `${window.location.pathname}${window.location.search}` || '/profile' }),
             })
             const data = await res.json().catch(() => null)
             if (!res.ok) throw new Error(data?.error || 'Failed to send verification link')
@@ -99,7 +99,7 @@ export default function ProfilePage() {
                         <div>
                             <p className="text-sm font-semibold" style={{ color: '#f59e0b' }}>Email verification pending</p>
                             <p className="text-sm mt-1" style={{ color: 'var(--cn-text-2)' }}>
-                                Your old account can still log in, but please verify your email to unlock all features.
+                                Check your inbox for the Neon verification email. Until you verify, place contributions and reviews stay locked.
                             </p>
                         </div>
                         <button
@@ -190,6 +190,7 @@ export default function ProfilePage() {
                                 {[
                                     { label: 'Full Name', value: user.name },
                                     { label: 'Email Address', value: user.email },
+                                    { label: 'Email Status', value: user.emailVerified ? 'Verified' : 'Pending Verification' },
                                     { label: 'Role', value: user.role },
                                 ].map(row => (
                                     <div key={row.label} className="flex justify-between items-center py-3.5">

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth, getCurrentUser } from '@/lib/auth'
+import { getCurrentUser } from '@/lib/auth'
+import { normalizeAppCallbackURL } from '@/lib/app-origin'
+import { postToNeonAuthProxy } from '@/lib/neon-auth-proxy'
 
 export async function POST(request: NextRequest) {
     try {
@@ -13,21 +15,25 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json().catch(() => ({}))
-        const callbackURL = typeof body?.callbackURL === 'string' && body.callbackURL.trim()
-            ? body.callbackURL
-            : '/profile'
+        const callbackURL = normalizeAppCallbackURL(request, body?.callbackURL, '/profile')
 
-        const result = await auth.sendVerificationEmail({
+        const result = await postToNeonAuthProxy<{
+            message?: string
+            code?: string
+        }>(request, 'send-verification-email', {
             email: user.email,
             callbackURL,
         })
 
-        if (result?.error) {
+        if (!result.ok) {
             return NextResponse.json(
                 {
-                    error: result.error.message || 'Could not send verification link right now',
+                    error:
+                        result.data?.message ||
+                        result.data?.code ||
+                        'Could not send verification link right now',
                 },
-                { status: 400 }
+                { status: result.status >= 400 ? result.status : 400 }
             )
         }
 

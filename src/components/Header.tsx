@@ -51,7 +51,7 @@ export default function Header() {
             const res = await fetch('/api/auth/send-verification-link', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ callbackURL: window.location.href }),
+                body: JSON.stringify({ callbackURL: `${window.location.pathname}${window.location.search}` || '/profile' }),
             })
             const data = await res.json().catch(() => null)
             if (!res.ok) throw new Error(data?.error || 'Failed to send verification link')
@@ -91,7 +91,7 @@ export default function Header() {
             {/* Unverified Banner */}
             {user && user.emailVerified === false && (
                 <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs md:text-sm font-medium z-50 relative animate-fade-in flex items-center justify-center gap-2">
-                    <span className="text-amber-200">Your email is unverified. Adding places and reviews is disabled.</span>
+                    <span className="text-amber-200">Your email is unverified. Check your inbox for the Neon verification email. Adding places and reviews is disabled.</span>
                     <button
                         onClick={handleResendVerification}
                         disabled={resendStatus === 'loading' || resendStatus === 'sent'}

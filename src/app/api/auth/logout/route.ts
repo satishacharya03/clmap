@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { removeAuthCookie } from '@/lib/auth-legacy'
+import { removeAuthCookie } from '@/lib/auth-credentials'
 
 export async function POST() {
     await removeAuthCookie()

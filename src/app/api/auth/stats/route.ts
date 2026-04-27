@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import prisma from '@/lib/db'
+import { pool } from '@/lib/edge-db'
 
 export async function GET() {
     try {
@@ -9,15 +9,15 @@ export async function GET() {
             return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
         }
 
-        const [placesCount, reviewsCount] = await Promise.all([
-            prisma.place.count({ where: { createdById: user.id } }),
-            prisma.review.count({ where: { userId: user.id } })
+        const [placesResult, reviewsResult] = await Promise.all([
+            pool.query('SELECT COUNT(*)::int AS count FROM places WHERE "createdById" = $1', [user.id]),
+            pool.query('SELECT COUNT(*)::int AS count FROM reviews WHERE "userId" = $1', [user.id]),
         ])
 
         return NextResponse.json({
             stats: {
-                places: placesCount,
-                reviews: reviewsCount
+                places: placesResult.rows[0]?.count ?? 0,
+                reviews: reviewsResult.rows[0]?.count ?? 0
             }
         })
     } catch (error) {
