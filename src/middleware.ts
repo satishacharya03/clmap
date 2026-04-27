@@ -10,9 +10,17 @@ const neonMiddleware = auth.middleware({
 export default async function middleware(request: NextRequest) {
     const { pathname, searchParams } = request.nextUrl
 
-    // 1. Check for credentials auth first
-    const credentialsToken = request.cookies.get('auth-token')?.value
+    // 1. Check for Neon Auth verifiers FIRST
+    // We only get here if the matcher allowed it (protected route or has verifier)
+    // If a verifier is present, we MUST run neonMiddleware to process it,
+    // regardless of whether the user has a credentials token.
+    const hasNeonAuthParam = Array.from(searchParams.keys()).some(key => key.startsWith('neon_auth_'))
+    if (hasNeonAuthParam) {
+        return neonMiddleware(request)
+    }
 
+    // 2. Check for credentials auth
+    const credentialsToken = request.cookies.get('auth-token')?.value
     if (credentialsToken) {
         const payload = await verifyToken(credentialsToken)
         if (payload?.email) {
@@ -20,8 +28,7 @@ export default async function middleware(request: NextRequest) {
         }
     }
 
-    // 2. Neon Auth logic
-    // We only get here if the matcher allowed it (protected route or has verifier)
+    // 3. Protected route logic (already matched by config.matcher)
     return neonMiddleware(request)
 }
 
