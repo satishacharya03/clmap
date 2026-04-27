@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { isAdmin } from '@/lib/auth'
 import AdminClientLayout from './AdminClientLayout'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminServerLayout({ children }: { children: React.ReactNode }) {
     // Check database role against the current authenticated user
     const isUserAdmin = await isAdmin()
