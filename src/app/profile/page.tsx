@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTheme } from '@/lib/useTheme'
 import { authClient } from '@/lib/auth-client'
@@ -10,13 +10,16 @@ interface User { id: string; name: string; email: string; role: string; emailVer
 
 export default function ProfilePage() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const { toggleTheme, isDark, mounted } = useTheme()
     const [user, setUser] = useState<User | null>(null)
     const [stats, setStats] = useState<{ places: number; reviews: number } | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [verificationStatus, setVerificationStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
+    const [justVerified, setJustVerified] = useState(false)
+    const syncedRef = useRef(false)
 
-    useEffect(() => {
+    const fetchUser = () =>
         fetch('/api/auth/me', { cache: 'no-store' })
             .then(r => { if (!r.ok) throw new Error(); return r.json() })
             .then(d => {
@@ -27,7 +30,30 @@ export default function ProfilePage() {
             })
             .catch(() => router.push('/login'))
             .finally(() => setIsLoading(false))
-    }, [router])
+
+    useEffect(() => {
+        const hasVerifier = searchParams.has('neon_auth_email_verification_verifier')
+
+        if (hasVerifier && !syncedRef.current) {
+            syncedRef.current = true
+            // Give Neon middleware ~800ms to process the verifier, then sync + re-fetch
+            setTimeout(async () => {
+                try {
+                    const res = await fetch('/api/auth/sync-verification', { method: 'POST' })
+                    const data = await res.json().catch(() => ({}))
+                    if (data?.verified) {
+                        setJustVerified(true)
+                        setTimeout(() => setJustVerified(false), 6000)
+                    }
+                } catch (e) {
+                    console.error('Sync verification failed:', e)
+                }
+                fetchUser()
+            }, 800)
+        } else {
+            fetchUser()
+        }
+    }, [router, searchParams])
 
     const handleLogout = async () => {
         await authClient.signOut().catch(() => null)
@@ -93,7 +119,19 @@ export default function ProfilePage() {
             </nav>
 
             <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-16">
-                {user.emailVerified === false && (
+            {/* ── JUST VERIFIED SUCCESS BANNER ── */}
+                {justVerified && (
+                    <div className="mb-6 rounded-2xl px-4 sm:px-5 py-4 flex items-center gap-3"
+                        style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)' }}>
+                        <span className="text-xl">✅</span>
+                        <div>
+                            <p className="text-sm font-semibold" style={{ color: '#10b981' }}>Email verified successfully!</p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--cn-text-2)' }}>You can now contribute places and write reviews.</p>
+                        </div>
+                    </div>
+                )}
+
+                {user.emailVerified === false && !justVerified && (
                     <div className="mb-6 rounded-2xl px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
                         style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
                         <div>

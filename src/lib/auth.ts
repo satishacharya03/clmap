@@ -164,11 +164,13 @@ export async function getOrCreateDbUser(neonUser: NeonAuthUser) {
         } : null
 
         if (existing) {
-            // Neon Auth might use emailVerified or email_verified
-            const neonVerified = (neonUser as any).emailVerified ?? (neonUser as any).email_verified;
-            const nextEmailVerified = neonVerified ?? existing.emailVerified;
+            // Neon Auth uses emailVerified or email_verified in session
+            // IMPORTANT: if undefined, do NOT fall back to the stale DB value — treat as unknown
+            const neonRaw = (neonUser as any).emailVerified ?? (neonUser as any).email_verified;
+            // Only override DB value if Neon explicitly provides a boolean
+            const nextEmailVerified = typeof neonRaw === 'boolean' ? neonRaw : existing.emailVerified;
 
-            console.log(`[AuthSync] Found existing user: ${normalizedEmail}. DBVerified: ${existing.emailVerified}, NeonRaw: ${neonVerified}`);
+            console.log(`[AuthSync] Found existing user: ${normalizedEmail}. DBVerified: ${existing.emailVerified}, NeonRaw: ${neonRaw}, NextVerified: ${nextEmailVerified}`);
             
             const nextName = neonUser.name ?? existing.name;
             const nextImage = neonUser.image ?? neonUser.picture ?? existing.image ?? null;
@@ -216,5 +218,25 @@ export async function getOrCreateDbUser(neonUser: NeonAuthUser) {
     } catch (err) {
         console.error("[AuthSync] Error in getOrCreateDbUser:", err);
         return null;
+    }
+}
+
+/**
+ * Called after a user clicks their email verification link.
+ * Forces emailVerified = true in the DB for the given userId.
+ * Only called from the verified API route after Neon confirms the session is verified.
+ */
+export async function markEmailVerifiedInDb(userId: string): Promise<boolean> {
+    try {
+        const result = await pool.query(
+            'UPDATE users SET "emailVerified" = true, "updatedAt" = NOW() WHERE id = $1 RETURNING id',
+            [userId]
+        )
+        const updated = result.rows.length > 0;
+        console.log(`[AuthSync] markEmailVerifiedInDb: userId=${userId}, updated=${updated}`);
+        return updated;
+    } catch (err) {
+        console.error('[AuthSync] markEmailVerifiedInDb error:', err);
+        return false;
     }
 }
